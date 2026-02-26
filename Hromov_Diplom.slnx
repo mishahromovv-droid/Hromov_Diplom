@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Hromov_Diplom/Hromov_Diplom.csproj" Id="a6cafff8-064e-4f38-a5e4-2ddc3c3716a0">
+    <Platform Solution="*|x86" Project="x86" />
+  </Project>
+</Solution>
