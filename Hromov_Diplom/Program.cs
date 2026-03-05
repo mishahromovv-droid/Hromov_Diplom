@@ -1,203 +1,148 @@
-﻿using System;
-using System.Collections.Generic;
+﻿#nullable enable
+using System;
 using System.Globalization;
-using System.IO;
-using System.Linq;
-using Hromov_Diplom.Config;
-using Hromov_Diplom.Models;
-using Hromov_Diplom.Reports;
-using Hromov_Diplom.ComService;
-using Hromov_Diplom.GeneratorProcessing;
 
 namespace Hromov_Diplom
 {
     internal class Program
     {
-        static void Main(string[] args)
-        {
-            Run();
-        }
-
-        static void Run()
+        static void Main()
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
-            // ✅ Удаляем старый файл перед запуском
-            if (File.Exists(AppSettings.CsvPath))
-            {
-                try
-                {
-                    File.Delete(AppSettings.CsvPath);
-                    Console.WriteLine("[CLEAN] Старый файл результатов удалён.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[WARN] Не удалось удалить файл: {ex.Message}");
-                }
-            }
+            Console.WriteLine("==========================================");
+            Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
+            Console.WriteLine("==========================================");
+            Console.WriteLine($"Станции: {string.Join(" → ", System.Array.ConvertAll(CalculationSettings.Stations, s => s.Name))}");
+            Console.WriteLine($"Коэффициенты: {string.Join("  ", CalculationSettings.ScaleFactors)}");
+            Console.WriteLine($"ut_vir: Act=0 кроме Num={VirSettings.KeepNum}");
+            Console.WriteLine($"Сечение для Pраб: Num={AppSettings.PrabSectionNum}");
+            Console.WriteLine($"Требуемый запас устойчивости ζтр: {AppSettings.RequiredReservePct:F1}%");
+            Console.WriteLine("==========================================\n");
 
-            PrintHeader();
-
-            using var rastrEngine = new RastrEngine();
             var reportManager = new ReportManager(AppSettings.CsvPath);
 
             foreach (var station in CalculationSettings.Stations)
             {
-                Console.WriteLine($"\n{'=',60}");
+                Console.WriteLine(new string('=', 70));
                 Console.WriteLine($"⚙ СТАНЦИЯ: {station.Name}");
                 Console.WriteLine($"   Генераторы: {string.Join(", ", station.GeneratorNums)}");
                 Console.WriteLine($"   Количество: {station.GeneratorNums.Length} шт.");
-                Console.WriteLine($"{'=',60}");
+                Console.WriteLine(new string('=', 70));
 
-                var generatorProcessor = new GeneratorProcessor(station.GeneratorNums, station.Name);
-
-                try
+                foreach (var factor in CalculationSettings.ScaleFactors)
                 {
-                    Console.Write("[INIT] Инициализация RastrWin3... ");
-                    rastrEngine.Initialize();
-                    Console.WriteLine("OK");
+                    Console.WriteLine($"\n# КОЭФФИЦИЕНТ: {factor:F1} | {station.Name}");
 
-                    foreach (double factor in CalculationSettings.ScaleFactors)
-                    {
-                        ProcessIteration(rastrEngine, generatorProcessor, factor, reportManager, station.Name);
-                    }
+                    var rep = RunOneIteration(station.Name, station.GeneratorNums, factor);
+                    reportManager.AddResult(rep);
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"\n✗ ОШИБКА: {ex.Message}");
-                }
+
+                Console.WriteLine();
             }
 
-            reportManager.WriteToFile(append: false);
-            reportManager.PrintSummaryTable();
+            reportManager.PrintSummaryTable(AppSettings.RequiredReservePct);
+            reportManager.WriteToFile(AppSettings.RequiredReservePct);
 
-            Console.WriteLine($"\n[INFO] Результаты сохранены: {AppSettings.CsvPath}");
+            Console.WriteLine("\nГотово.");
+            Console.ReadKey();
         }
 
-        static void PrintHeader()
+        private static IterationReport RunOneIteration(string stationName, int[] genNums, double factor)
         {
-            Console.WriteLine("==========================================");
-            Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
-            Console.WriteLine("==========================================");
-            Console.WriteLine($"Станции: {string.Join(" → ", CalculationSettings.Stations.Select(s => s.Name))}");
-            Console.WriteLine($"Коэффициенты: {string.Join("  ", CalculationSettings.ScaleFactors.Select(f => f.ToString("0.0")))}");
-            Console.WriteLine($"Генераторы: {string.Join(", ", GetAllGeneratorNums())}");
-            Console.WriteLine($"ut_vir: Act=0 кроме Num={VirSettings.KeepNum}");
-            Console.WriteLine("==========================================\n");
-        }
-
-        static string GetAllGeneratorNums()
-        {
-            return string.Join(", ", CalculationSettings.Stations.SelectMany(s => s.GeneratorNums));
-        }
-
-        static void ProcessIteration(
-            RastrEngine engine,
-            GeneratorProcessor processor,
-            double factor,
-            ReportManager reporter,
-            string stationName)
-        {
-            Console.WriteLine($"\n{'#',50}");
-            Console.WriteLine($"# КОЭФФИЦИЕНТ: {factor,32} | {stationName,-15}");
-            Console.WriteLine($"{'#',50}");
-
-            IterationReport currentReport = new IterationReport
+            var report = new IterationReport
             {
+                StationName = stationName,
                 Factor = factor,
-                StationName = stationName
+                Status = "UNSET"
             };
 
             try
             {
-                Console.Write("  [LOAD] Загрузка режима... ");
-                engine.LoadModeFiles(AppSettings.RegimeDirectory);
-                Console.WriteLine("OK");
+                using var engine = new RastrEngine();
+                engine.Initialize();
+                Console.WriteLine("  [INIT] Инициализация RastrWin3... OK");
 
-                Console.Write("  [VIR] Модификация ut_vir... ");
+                Console.WriteLine("  [LOAD] Загрузка режима... ");
+                engine.LoadModeFiles(AppSettings.RegimeDirectory);
+                Console.WriteLine("  [LOAD] OK");
+
+                Console.WriteLine("  [VIR] Модификация ut_vir...");
                 engine.ZeroVirTable(VirSettings.TableName, VirSettings.ColumnName, VirSettings.KeepNum);
 
-                Console.Write("  [MOD] Модификация генераторов... ");
-                var modifications = processor.ApplyLimits(engine.RawObject, factor);
+                var processor = new GeneratorProcessor(genNums);
 
-                PrintModifications(modifications, stationName);
+                Console.WriteLine("  [MOD] Модификация генераторов...");
+                processor.ApplyLimits(engine.RawObject, factor);
+                Console.WriteLine("  [MOD] OK");
 
-                Console.WriteLine($"OK ({modifications.Count} шт.)");
-
-                Console.Write("  [VAL] Валидация диапазонов... ");
+                Console.WriteLine("  [VAL] Валидация диапазонов...");
                 if (!processor.ValidateRanges(engine.RawObject))
                 {
-                    Console.WriteLine("❌ Неверные границы Qmin/Qmax");
-                    currentReport.Status = "INVALID_DATA";
-                    reporter.AddResult(currentReport);
-                    return;
+                    report.Status = "FAIL";
+                    report.ErrorDetails = "Qmax < Qmin у одного из генераторов";
+                    Console.WriteLine("  [VAL] ❌ FAIL: Qmax < Qmin");
+                    return report;
                 }
-                Console.WriteLine("✅ OK");
+                Console.WriteLine("  [VAL] ✅ OK");
 
-                Console.Write("  [CALC] Расчёт МДП... ");
+                // базовый режим (без утяжеления)
+                Console.WriteLine("  [BASE] Расчёт базового режима...");
+                engine.SolveBaseMode();
+                Console.WriteLine("  [BASE] OK");
+
+                // Pраб
+                double? prab = engine.GetSectionFlow(AppSettings.PrabSectionNum);
+                report.Result.PrabSech17 = prab;
+                Console.WriteLine($"  [SECH] Pраб в сечении {AppSettings.PrabSectionNum}... {(prab.HasValue ? prab.Value.ToString("F3", CultureInfo.InvariantCulture) : "НЕ НАЙДЕНО")}");
+
+                // ΣQ
+                QTotals qt = processor.GetQTotals(engine.RawObject);
+                report.Result.QminTotal = qt.QminTotal;
+                report.Result.QmaxTotal = qt.QmaxTotal;
+                report.Result.QrangeTotal = qt.QrangeTotal;
+
+                // МДП
+                Console.WriteLine("  [CALC] Расчёт МДП...");
                 engine.CalculateEmergencies();
 
-                Console.Write("  [GET] Получение результатов... ");
                 if (!engine.HasResults())
                 {
-                    Console.WriteLine("❌ Таблица ut_os_result пуста");
-                    currentReport.Status = "NO_RESULTS";
-                    reporter.AddResult(currentReport);
-                    return;
+                    report.Status = "NO_RESULTS";
+                    report.ErrorDetails = "ut_os_result пуста";
+                    Console.WriteLine("  [GET] ❌ Таблица ut_os_result пуста");
+                    return report;
                 }
-                Console.WriteLine("✅ OK");
 
-                var result = engine.GetResults();
-                PrintResultConsole(result);
+                var res = engine.ReadResults();
 
-                currentReport.Result = result;
-                currentReport.Status = result.IsSuccess ? "OK" : "FAILED_CALCULATION";
+                report.Result.Pred = res.Pred;
+                report.Result.PadpReal = res.PadpReal;
+                report.Result.ItogMdp = res.ItogMdp;
+                report.Result.ItogMdpPa = res.ItogMdpPa;
+
+                if (report.Result.ItogMdp.HasValue)
+                {
+                    report.Status = "OK";
+                    Console.WriteLine("  [GET] ✅ OK");
+                }
+                else
+                {
+                    report.Status = "NO_RESULTS";
+                    report.ErrorDetails = "ItogMdp не прочитан";
+                    Console.WriteLine("  [GET] ⚠ ItogMdp не прочитан");
+                }
+
+                return report;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"\n✗ ОШИБКА: {ex.Message}");
-                currentReport.Status = $"ERROR: {ex.Message.Split(':')[0]}";
-                currentReport.ErrorDetails = ex.Message;
+                report.Status = "FAIL";
+                report.ErrorDetails = ex.Message;
+                Console.WriteLine("  ✗ ОШИБКА: " + ex.Message);
+                return report;
             }
-
-            reporter.AddResult(currentReport);
         }
-
-        static void PrintResultConsole(CalculationResult result)
-        {
-            Console.WriteLine("  +--------------------------------------------------------------+");
-            Console.WriteLine($"  |  PRED (P_пр):              {FormatVal(result.Pred),15}               |");
-            Console.WriteLine($"  |  PADP_REAL (АДП):          {FormatVal(result.PadpReal),15}               |");
-            Console.WriteLine($"  |  ITOG_MDP (P_МДП):         {FormatVal(result.ItogMdp),15}               |");
-            Console.WriteLine($"  |  ITOG_MDP_PA (P_МДП_с_ПА): {FormatVal(result.ItogMdpPa),15}               |");
-            Console.WriteLine("  +--------------------------------------------------------------+");
-        }
-
-        static void PrintModifications(List<(int num, string name, double qmin, double qmaxOld, double qmaxNew)> mods, string stationName)
-        {
-            if (mods.Count == 0) return;
-
-            Console.WriteLine();
-            Console.WriteLine($"┌─────────────────────────────────────────────────────────────────────────┐");
-            Console.WriteLine($"│            ИЗМЕНЕНИЯ ГЕНЕРАТОРОВ ({stationName}, NumPQ=0):            │");
-            Console.WriteLine($"├────────┬─────────────────────────────────┬──────────┬───────────────────┤");
-            Console.WriteLine($"│   Num  │              Name               │   Qmin   │        Qmax       │");
-            Console.WriteLine($"├────────┼─────────────────────────────────┼──────────┼───────────────────┤");
-
-            foreach (var m in mods)
-            {
-                string namePad = m.name.PadRight(29);
-                string qminFormatted = $"{m.qmin,8:F2}";
-                string qmaxFormatted = $"{m.qmaxOld,7:F2}";
-                string qmaxNewFormatted = $"{m.qmaxNew,7:F2}";
-
-                Console.WriteLine($"│  {m.num,4}  │  {namePad}  │ {qminFormatted} │ {qmaxFormatted} → {qmaxNewFormatted} │");
-            }
-
-            Console.WriteLine($"└─────────────────────────────────────────────────────────────────────────┘");
-        }
-
-        static string FormatVal(double? val)
-            => val.HasValue ? val.Value.ToString("F3", CultureInfo.InvariantCulture) : "-";
     }
 }
