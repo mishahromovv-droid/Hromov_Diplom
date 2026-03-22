@@ -1,5 +1,4 @@
-﻿#nullable enable
-using System;
+﻿using System;
 using System.Globalization;
 
 namespace Hromov_Diplom
@@ -8,13 +7,16 @@ namespace Hromov_Diplom
     {
         static void Main()
         {
+            // ✅ УСТАНОВЛЕНА РУССКАЯ ЛОКАЛЬ ДЛЯ ФОРМАТИРОВАНИЯ ЧИСЕЛ С ЗАПЯТОЙ
+            CultureInfo.CurrentCulture = new CultureInfo("ru-RU");
+            CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("ru-RU");
+
             Console.OutputEncoding = System.Text.Encoding.UTF8;
-            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
             Console.WriteLine("==========================================");
             Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
             Console.WriteLine("==========================================");
-            Console.WriteLine($"Станции: {string.Join(" → ", System.Array.ConvertAll(CalculationSettings.Stations, s => s.Name))}");
+            Console.WriteLine($"Станции: {string.Join(" → ", Array.ConvertAll(CalculationSettings.Stations, s => s.Name))}");
             Console.WriteLine($"Коэффициенты: {string.Join("  ", CalculationSettings.ScaleFactors)}");
             Console.WriteLine($"ut_vir: Act=0 кроме Num={VirSettings.KeepNum}");
             Console.WriteLine($"Сечение для Pраб: Num={AppSettings.PrabSectionNum}");
@@ -42,10 +44,38 @@ namespace Hromov_Diplom
                 Console.WriteLine();
             }
 
+            Console.WriteLine("\n>>> Сохранение основных результатов в CSV...\n");
             reportManager.PrintSummaryTable(AppSettings.RequiredReservePct);
+
+            string finalCsvPath = reportManager.GetFinalCsvPath();
             reportManager.WriteToFile(AppSettings.RequiredReservePct);
 
-            Console.WriteLine("\nГотово.");
+            Console.WriteLine("\n\n>>> Расчёт коэффициента влияния k_B...\n");
+            Console.WriteLine("(Убедитесь, что Excel закрыт перед запуском, иначе данные не запишутся!)");
+
+            var kbResults = InfluenceCoefficientCalculator.CalculateKBForAllStations(reportManager.GetReports());
+
+            if (kbResults.Count > 0)
+            {
+                Console.WriteLine("✅ Данные k_B получены. Запись в файл...");
+
+                try
+                {
+                    InfluenceCoefficientCalculator.WriteKBToCsv(finalCsvPath, kbResults);
+                    Console.WriteLine($"✅ Коэффициенты k_B успешно записаны в файл: {finalCsvPath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Ошибка записи k_B в файл: {ex.Message}");
+                    Console.WriteLine("Попробуйте запустить программу снова после закрытия Excel.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("⚠️ Нет данных для расчёта k_B (мало результатов).");
+            }
+
+            Console.WriteLine("\nГотово. Нажмите Enter для выхода...");
             Console.ReadKey();
         }
 
@@ -87,23 +117,19 @@ namespace Hromov_Diplom
                 }
                 Console.WriteLine("  [VAL] ✅ OK");
 
-                // базовый режим (без утяжеления)
                 Console.WriteLine("  [BASE] Расчёт базового режима...");
                 engine.SolveBaseMode();
                 Console.WriteLine("  [BASE] OK");
 
-                // Pраб
-                double? prab = engine.GetSectionFlow(AppSettings.PrabSectionNum);
+                double prab = engine.GetSectionFlow(AppSettings.PrabSectionNum);
                 report.Result.PrabSech17 = prab;
-                Console.WriteLine($"  [SECH] Pраб в сечении {AppSettings.PrabSectionNum}... {(prab.HasValue ? prab.Value.ToString("F3", CultureInfo.InvariantCulture) : "НЕ НАЙДЕНО")}");
+                Console.WriteLine($"  [SECH] Pраб в сечении {AppSettings.PrabSectionNum}: {(prab > 0 ? prab.ToString("F3") : "НЕ НАЙДЕНО")}");
 
-                // ΣQ
                 QTotals qt = processor.GetQTotals(engine.RawObject);
                 report.Result.QminTotal = qt.QminTotal;
                 report.Result.QmaxTotal = qt.QmaxTotal;
                 report.Result.QrangeTotal = qt.QrangeTotal;
 
-                // МДП
                 Console.WriteLine("  [CALC] Расчёт МДП...");
                 engine.CalculateEmergencies();
 
@@ -111,7 +137,7 @@ namespace Hromov_Diplom
                 {
                     report.Status = "NO_RESULTS";
                     report.ErrorDetails = "ut_os_result пуста";
-                    Console.WriteLine("  [GET] ❌ Таблица ut_os_result пуста");
+                    Console.WriteLine("  [GET] ❌ ut_os_result пуста");
                     return report;
                 }
 
@@ -122,7 +148,7 @@ namespace Hromov_Diplom
                 report.Result.ItogMdp = res.ItogMdp;
                 report.Result.ItogMdpPa = res.ItogMdpPa;
 
-                if (report.Result.ItogMdp.HasValue)
+                if (report.Result.ItogMdp > 0)
                 {
                     report.Status = "OK";
                     Console.WriteLine("  [GET] ✅ OK");
@@ -132,6 +158,11 @@ namespace Hromov_Diplom
                     report.Status = "NO_RESULTS";
                     report.ErrorDetails = "ItogMdp не прочитан";
                     Console.WriteLine("  [GET] ⚠ ItogMdp не прочитан");
+                }
+
+                if (!double.IsNaN(prab) && !double.IsInfinity(prab) && prab > 0)
+                {
+                    report.Result.HasCore = true;
                 }
 
                 return report;

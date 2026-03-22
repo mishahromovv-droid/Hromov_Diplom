@@ -52,6 +52,7 @@
   <ItemGroup>
     <Compile Include="Config.cs" />
     <Compile Include="GeneratorProcessor.cs" />
+    <Compile Include="InfluenceCoefficientCalculator.cs" />
     <Compile Include="Models.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

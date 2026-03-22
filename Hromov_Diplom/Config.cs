@@ -1,12 +1,10 @@
-﻿#nullable enable
-using System;
+﻿using System;
 
 namespace Hromov_Diplom
 {
-    /// <summary>Конфигурация станции/регулятора</summary>
     public class RegulatorConfig
     {
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; set; } = "";
         public int[] GeneratorNums { get; set; } = Array.Empty<int>();
     }
 
@@ -19,47 +17,21 @@ namespace Hromov_Diplom
 
     public static class CalculationSettings
     {
-        public static readonly double[] ScaleFactors =
-        {
-            0.1, 0.2, 0.3, 0.4, 0.5,
-            0.6, 0.7, 0.8, 0.9, 1.0
-        };
+        public static readonly double[] ScaleFactors = new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0 };
 
-        public static readonly RegulatorConfig[] Stations =
+        public static readonly RegulatorConfig[] Stations = new[]
         {
-            new RegulatorConfig
-            {
-                Name = "Богучанская ГЭС",
-                GeneratorNums = new[] { 37, 38, 39, 40, 41, 42, 43, 44, 45 }
-            },
-            new RegulatorConfig
-            {
-                Name = "Красноярская ГЭС",
-                GeneratorNums = new[] { 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167 }
-            },
-            new RegulatorConfig
-            {
-                Name = "Красноярская ГРЭС-2",
-                GeneratorNums = new[] { 147, 148, 149, 150, 151, 152, 153, 154, 155 }
-            }
+            new RegulatorConfig { Name = "Богучанская ГЭС", GeneratorNums = new int[] { 37, 38, 39, 40, 41, 42, 43, 44, 45 } },
+            new RegulatorConfig { Name = "Красноярская ГЭС", GeneratorNums = new int[] { 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167 } },
+            new RegulatorConfig { Name = "Красноярская ГРЭС-2", GeneratorNums = new int[] { 147, 148, 149, 150, 151, 152, 153, 154, 155 } }
         };
     }
 
     public static class AppSettings
     {
-        public static readonly string RegimeDirectory =
-            @"C:\Users\Михаил\Desktop\Diplom_Hromov\mdp_debug_0";
-
-        public static readonly string CsvPath =
-            @"C:\Users\Михаил\Desktop\Diplom_Hromov\results_mdp.csv";
-
-        public const int DecimalPrecision = 3;
-
-        // ✅ Сечение для Pраб (таблица sechen, ns = 17, столбец psech)
+        public static readonly string RegimeDirectory = @"C:\Users\Михаил\Desktop\Diplom_Hromov\mdp_debug_0";
+        public static readonly string CsvPath = @"C:\Users\Михаил\Desktop\Diplom_Hromov\results_mdp.csv";
         public const int PrabSectionNum = 17;
-
-        // ✅ Требуемый запас устойчивости ζтр, %
-        // Поставь как требует преподаватель (например 20)
         public const double RequiredReservePct = 20.0;
     }
 }

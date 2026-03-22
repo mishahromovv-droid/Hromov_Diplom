@@ -1,24 +1,24 @@
-﻿#nullable enable
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace Hromov_Diplom
 {
-    /// <summary>Обёртка над COM RastrWin3</summary>
     public class RastrEngine : IDisposable
     {
-        private dynamic? _rastrObj;
+        private dynamic _rastrObj;
         private bool _disposed;
 
-        public dynamic RawObject => _rastrObj ?? throw new Exception("RastrWin3 не инициализирован.");
+        public dynamic RawObject
+        {
+            get { return _rastrObj ?? throw new Exception("RastrWin3 не инициализирован."); }
+        }
 
         public void Initialize(string progId = "Astra.Rastr")
         {
-            Type type = Type.GetTypeFromProgID(progId)
-                ?? throw new Exception($"COM-объект '{progId}' не зарегистрирован.");
-
+            Type type = Type.GetTypeFromProgID(progId);
+            if (type == null) throw new Exception($"COM-объект '{progId}' не зарегистрирован.");
             _rastrObj = Activator.CreateInstance(type);
         }
 
@@ -43,13 +43,8 @@ namespace Hromov_Diplom
         public int ZeroVirTable(string tableName, string columnName, int keepNum)
         {
             int modified = 0;
-
             var table = _rastrObj?.Tables(tableName);
-            if (table == null)
-            {
-                Console.WriteLine($"  ⚠ Таблица {tableName} не найдена");
-                return 0;
-            }
+            if (table == null) return 0;
 
             var colNum = table.Cols("Num");
             var colAct = table.Cols(columnName);
@@ -68,20 +63,18 @@ namespace Hromov_Diplom
             return modified;
         }
 
-        /// <summary>Расчёт базового режима (без утяжеления)</summary>
         public void SolveBaseMode()
         {
-            _rastrObj?.rgm("");
+            if (_rastrObj != null) _rastrObj.rgm("");
         }
 
-        /// <summary>Pраб: таблица sechen, ns=номер сечения, столбец psech</summary>
-        public double? GetSectionFlow(int sectionNum)
+        public double GetSectionFlow(int sectionNum)
         {
             try
             {
-                var t = _rastrObj?.Tables("sechen");
-                if (t == null) return null;
-
+                if (_rastrObj == null) return 0.0;
+                var t = _rastrObj.Tables("sechen");
+                if (t == null) return 0.0;
                 var colNs = t.Cols("ns");
                 var colPsech = t.Cols("psech");
 
@@ -91,82 +84,96 @@ namespace Hromov_Diplom
                     if (ns == sectionNum)
                         return Convert.ToDouble(colPsech.Z[i]);
                 }
-                return null;
+                return 0.0;
             }
-            catch
-            {
-                return null;
-            }
+            catch { return 0.0; }
         }
 
-        /// <summary>Запуск расчёта МДП/аварий</summary>
         public void CalculateEmergencies()
         {
-            _rastrObj?.emergencies("");
+            if (_rastrObj != null) _rastrObj.emergencies("");
         }
 
         public bool HasResults()
         {
             try
             {
-                var table = _rastrObj?.Tables("ut_os_result");
+                if (_rastrObj == null) return false;
+                var table = _rastrObj.Tables("ut_os_result");
                 return table != null && table.Count > 0;
             }
-            catch
-            {
-                return false;
-            }
+            catch { return false; }
         }
 
-        /// <summary>Читаем ut_os_result</summary>
         public CalculationResult ReadResults()
         {
             var result = new CalculationResult();
 
             try
             {
-                var table = _rastrObj?.Tables("ut_os_result");
+                if (_rastrObj == null) return result;
+
+                var table = _rastrObj.Tables("ut_os_result");
                 if (table == null || table.Count == 0) return result;
 
-                // Берём первую строку (обычно там нужные итоги)
-                int i = 0;
+                var columnNames = new[] { "pred", "padp_real", "itog_mdp", "itog_mdp_pa" };
 
-                result.Pred = TryRead(table, "pred", i);
-                result.PadpReal = TryRead(table, "padp_real", i);
-                result.ItogMdp = TryRead(table, "itog_mdp", i);
-                result.ItogMdpPa = TryRead(table, "itog_mdp_pa", i);
+                foreach (var colName in columnNames)
+                {
+                    double maxVal = -999999.0;
+                    var col = table.Cols(colName);
 
-                return result;
+                    for (int i = 0; i < table.Count; i++)
+                    {
+                        double val = TryGetDoubleValue(col, i);
+                        if (val > maxVal)
+                            maxVal = val;
+                    }
+
+                    if (maxVal > -100000.0)
+                    {
+                        switch (colName)
+                        {
+                            case "pred": result.Pred = maxVal; break;
+                            case "padp_real": result.PadpReal = maxVal; break;
+                            case "itog_mdp": result.ItogMdp = maxVal; break;
+                            case "itog_mdp_pa": result.ItogMdpPa = maxVal; break;
+                        }
+                    }
+                }
             }
-            catch
-            {
-                return result;
-            }
+            catch { /* Пропускаем ошибки */ }
+
+            return result;
         }
 
-        private static double? TryRead(dynamic table, string col, int row)
+        private static double TryGetDoubleValue(dynamic col, int row)
         {
             try
             {
-                double v = Convert.ToDouble(table.Cols(col).Z[row]);
-                return v;
+                object obj = col.Z[row];
+                if (obj == null) return 0.0;
+
+                string str = Convert.ToString(obj).Trim();
+                if (string.IsNullOrEmpty(str) || str == "-" || str == "Н/Д" || str == "---")
+                    return 0.0;
+
+                return Convert.ToDouble(str);
             }
             catch
             {
-                return null;
+                return 0.0;
             }
         }
 
         public void Dispose()
         {
             if (_disposed) return;
-
             if (_rastrObj != null)
             {
                 try { Marshal.ReleaseComObject(_rastrObj); } catch { }
                 _rastrObj = null;
             }
-
             _disposed = true;
         }
     }
