@@ -184,7 +184,7 @@ namespace Hromov_Diplom
                 report.Result.PadpReal = res.PadpReal;
                 report.Result.ItogMdp = res.ItogMdp;
                 report.Result.ItogMdpPa = res.ItogMdpPa;
-
+                 
                 if (report.Result.ItogMdp > 0)
                 {
                     report.Status = "OK";
