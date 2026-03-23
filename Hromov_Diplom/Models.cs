@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace Hromov_Diplom
 {
@@ -33,13 +32,16 @@ namespace Hromov_Diplom
     {
         public double QminTotal;
         public double QmaxTotal;
-
-        public QTotals(double qminTotal, double qmaxTotal)
-        {
-            QminTotal = qminTotal;
-            QmaxTotal = qmaxTotal;
-        }
-
         public double QrangeTotal => QmaxTotal - QminTotal;
+        public QTotals(double qminTotal, double qmaxTotal) { QminTotal = qminTotal; QmaxTotal = qmaxTotal; }
+    }
+
+    public struct GenNodeConnection
+    {
+        public int GenNum;           // Номер генератора
+        public string GenName;       // Имя из таблицы Generator
+        public int NodeNum;          // Номер узла
+        public string StationName;   // Название станции
+        public string StationCode;   // Код станции
     }
 }

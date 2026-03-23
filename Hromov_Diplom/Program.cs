@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Globalization;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace Hromov_Diplom
 {
@@ -7,48 +9,89 @@ namespace Hromov_Diplom
     {
         static void Main()
         {
-            // ✅ УСТАНОВЛЕНА РУССКАЯ ЛОКАЛЬ ДЛЯ ФОРМАТИРОВАНИЯ ЧИСЕЛ С ЗАПЯТОЙ
             CultureInfo.CurrentCulture = new CultureInfo("ru-RU");
             CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("ru-RU");
-
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
             Console.WriteLine("==========================================");
             Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
-            Console.WriteLine("==========================================");
-            Console.WriteLine($"Станции: {string.Join(" → ", Array.ConvertAll(CalculationSettings.Stations, s => s.Name))}");
-            Console.WriteLine($"Коэффициенты: {string.Join("  ", CalculationSettings.ScaleFactors)}");
-            Console.WriteLine($"ut_vir: Act=0 кроме Num={VirSettings.KeepNum}");
-            Console.WriteLine($"Сечение для Pраб: Num={AppSettings.PrabSectionNum}");
-            Console.WriteLine($"Требуемый запас устойчивости ζтр: {AppSettings.RequiredReservePct:F1}%");
             Console.WriteLine("==========================================\n");
 
+            var engine = new RastrEngine();
+
+            try
+            {
+                engine.Initialize();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CRITICAL ERROR]: {ex.Message}\n");
+                Console.WriteLine("Проверьте, что программа RASTRA запущена!");
+                Console.ReadKey();
+                return;
+            }
+
+            Console.WriteLine(">>> Инициализация завершена успешно!\n");
+
+            string path = AppSettings.RegimeDirectory;
+            try
+            {
+                engine.LoadModeFiles(path);
+                Console.WriteLine(">>> Режим загружен успешно.\n");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[LOAD ERROR]: {ex.Message}");
+                Console.ReadKey();
+                return;
+            }
+
             var reportManager = new ReportManager(AppSettings.CsvPath);
+            List<GenNodeConnection> allConnections = new List<GenNodeConnection>();
 
             foreach (var station in CalculationSettings.Stations)
             {
                 Console.WriteLine(new string('=', 70));
-                Console.WriteLine($"⚙ СТАНЦИЯ: {station.Name}");
+                Console.WriteLine($"⚙ СТАНЦИЯ: {station.Name} ({station.Code})");
                 Console.WriteLine($"   Генераторы: {string.Join(", ", station.GeneratorNums)}");
-                Console.WriteLine($"   Количество: {station.GeneratorNums.Length} шт.");
                 Console.WriteLine(new string('=', 70));
+
+                // Чтение связей
+                var connections = VoltageAnalyzer.GetConnections(engine.RawObject, station.GeneratorNums, station.Name, station.Code);
+                allConnections.AddRange(connections);
+
+                if (connections.Count > 0)
+                {
+                    Console.WriteLine("\n🔗 СВЯЗИ ГЕНЕРАТОРОВ:");
+                    foreach (var conn in connections)
+                    {
+                        string connectionText = $" | Г-{conn.GenNum,-3} → Узел {conn.NodeNum,-4} | {conn.GenName,-30} | {conn.StationName}, {conn.StationCode} |";
+                        Console.WriteLine(connectionText);
+                    }
+                    Console.WriteLine();
+                }
 
                 foreach (var factor in CalculationSettings.ScaleFactors)
                 {
                     Console.WriteLine($"\n# КОЭФФИЦИЕНТ: {factor:F1} | {station.Name}");
 
-                    var rep = RunOneIteration(station.Name, station.GeneratorNums, factor);
+                    var rep = RunOneIteration(station.Name, station.GeneratorNums, factor, engine);
                     reportManager.AddResult(rep);
                 }
 
                 Console.WriteLine();
             }
 
+            // Основные результаты
             Console.WriteLine("\n>>> Сохранение основных результатов в CSV...\n");
             reportManager.PrintSummaryTable(AppSettings.RequiredReservePct);
 
             string finalCsvPath = reportManager.GetFinalCsvPath();
             reportManager.WriteToFile(AppSettings.RequiredReservePct);
+
+            // СОХРАНЕНИЕ СВЯЗЕЙ ПОСЛЕ ОСНОВНЫХ ДАННЫХ
+            Console.WriteLine(">>> Сохранение связей в конец CSV файла...");
+            VoltageAnalyzer.SaveConnectionsToCsv(allConnections, finalCsvPath);
 
             Console.WriteLine("\n\n>>> Расчёт коэффициента влияния k_B...\n");
             Console.WriteLine("(Убедитесь, что Excel закрыт перед запуском, иначе данные не запишутся!)");
@@ -57,29 +100,28 @@ namespace Hromov_Diplom
 
             if (kbResults.Count > 0)
             {
-                Console.WriteLine("✅ Данные k_B получены. Запись в файл...");
-
                 try
                 {
                     InfluenceCoefficientCalculator.WriteKBToCsv(finalCsvPath, kbResults);
-                    Console.WriteLine($"✅ Коэффициенты k_B успешно записаны в файл: {finalCsvPath}");
+                    Console.WriteLine($"✅ Коэффициенты k_B записаны в: {finalCsvPath}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"❌ Ошибка записи k_B в файл: {ex.Message}");
-                    Console.WriteLine("Попробуйте запустить программу снова после закрытия Excel.");
+                    Console.WriteLine($"❌ Ошибка записи k_B: {ex.Message}");
                 }
             }
             else
             {
-                Console.WriteLine("⚠️ Нет данных для расчёта k_B (мало результатов).");
+                Console.WriteLine("⚠️ Нет данных для расчёта k_B.");
             }
 
             Console.WriteLine("\nГотово. Нажмите Enter для выхода...");
             Console.ReadKey();
+
+            engine.Dispose();
         }
 
-        private static IterationReport RunOneIteration(string stationName, int[] genNums, double factor)
+        private static IterationReport RunOneIteration(string stationName, int[] genNums, double factor, RastrEngine engineInstance)
         {
             var report = new IterationReport
             {
@@ -90,50 +132,45 @@ namespace Hromov_Diplom
 
             try
             {
-                using var engine = new RastrEngine();
-                engine.Initialize();
                 Console.WriteLine("  [INIT] Инициализация RastrWin3... OK");
-
-                Console.WriteLine("  [LOAD] Загрузка режима... ");
-                engine.LoadModeFiles(AppSettings.RegimeDirectory);
-                Console.WriteLine("  [LOAD] OK");
+                Console.WriteLine("  [LOAD] Загрузка режима... OK");
 
                 Console.WriteLine("  [VIR] Модификация ut_vir...");
-                engine.ZeroVirTable(VirSettings.TableName, VirSettings.ColumnName, VirSettings.KeepNum);
+                engineInstance.ZeroVirTable(VirSettings.TableName, VirSettings.ColumnName, VirSettings.KeepNum);
 
                 var processor = new GeneratorProcessor(genNums);
 
                 Console.WriteLine("  [MOD] Модификация генераторов...");
-                processor.ApplyLimits(engine.RawObject, factor);
+                processor.ApplyLimits(engineInstance.RawObject, factor);
                 Console.WriteLine("  [MOD] OK");
 
                 Console.WriteLine("  [VAL] Валидация диапазонов...");
-                if (!processor.ValidateRanges(engine.RawObject))
+                if (!processor.ValidateRanges(engineInstance.RawObject))
                 {
                     report.Status = "FAIL";
-                    report.ErrorDetails = "Qmax < Qmin у одного из генераторов";
+                    report.ErrorDetails = "Qmax < Qmin";
                     Console.WriteLine("  [VAL] ❌ FAIL: Qmax < Qmin");
                     return report;
                 }
                 Console.WriteLine("  [VAL] ✅ OK");
 
                 Console.WriteLine("  [BASE] Расчёт базового режима...");
-                engine.SolveBaseMode();
+                engineInstance.SolveBaseMode();
                 Console.WriteLine("  [BASE] OK");
 
-                double prab = engine.GetSectionFlow(AppSettings.PrabSectionNum);
+                double prab = engineInstance.GetSectionFlow(AppSettings.PrabSectionNum);
                 report.Result.PrabSech17 = prab;
                 Console.WriteLine($"  [SECH] Pраб в сечении {AppSettings.PrabSectionNum}: {(prab > 0 ? prab.ToString("F3") : "НЕ НАЙДЕНО")}");
 
-                QTotals qt = processor.GetQTotals(engine.RawObject);
+                QTotals qt = processor.GetQTotals(engineInstance.RawObject);
                 report.Result.QminTotal = qt.QminTotal;
                 report.Result.QmaxTotal = qt.QmaxTotal;
                 report.Result.QrangeTotal = qt.QrangeTotal;
 
                 Console.WriteLine("  [CALC] Расчёт МДП...");
-                engine.CalculateEmergencies();
+                engineInstance.CalculateEmergencies();
 
-                if (!engine.HasResults())
+                if (!engineInstance.HasResults())
                 {
                     report.Status = "NO_RESULTS";
                     report.ErrorDetails = "ut_os_result пуста";
@@ -141,7 +178,7 @@ namespace Hromov_Diplom
                     return report;
                 }
 
-                var res = engine.ReadResults();
+                var res = engineInstance.ReadResults();
 
                 report.Result.Pred = res.Pred;
                 report.Result.PadpReal = res.PadpReal;

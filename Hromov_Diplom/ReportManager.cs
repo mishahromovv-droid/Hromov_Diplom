@@ -144,7 +144,6 @@ namespace Hromov_Diplom
             }
         }
 
-        // ✅ ИЗМЕНЕНО: добавлена функция с запятой вместо точки
         private static string Fmt(double v) => v.ToString("F3").Replace(",", ".").Replace(".", ",");
         private static string FmtCsv(double v) => v.ToString("F3").Replace(",", ".").Replace(".", ",");
 

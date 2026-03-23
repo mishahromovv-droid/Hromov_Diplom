@@ -7,9 +7,6 @@ namespace Hromov_Diplom
 {
     public static class InfluenceCoefficientCalculator
     {
-        /// <summary>
-        /// Структура для хранения результата расчёта k_B между двумя итерациями
-        /// </summary>
         public struct KBResult
         {
             public string StationName;
@@ -20,9 +17,6 @@ namespace Hromov_Diplom
             public double KB;
         }
 
-        /// <summary>
-        /// Расчитывает коэффициент влияния k_B по всем данным за станции
-        /// </summary>
         public static List<KBResult> CalculateKBForAllStations(List<IterationReport> reports)
         {
             var kbResults = new List<KBResult>();
@@ -63,45 +57,18 @@ namespace Hromov_Diplom
             return kbResults;
         }
 
-        /// <summary>
-        /// Вывод таблицы расчёта k_B в консоль
-        /// </summary>
-        public static void PrintKBTable(List<KBResult> kbResults)
-        {
-            Console.WriteLine("\n==========================================");
-            Console.WriteLine("          КОЭФФИЦИЕНТ ВЛИЯНИЯ k_B");
-            Console.WriteLine("==========================================");
-            Console.WriteLine("| Станция              | Факторы   | ΔQ(Мвар) | ΔP(МВт) | k_B(МВт/Мвар) |");
-            Console.WriteLine("+----------------------+-----------+----------+---------+---------------+");
-
-            foreach (var res in kbResults)
-            {
-                string stationName = res.StationName.Length > 19 ? res.StationName.Substring(0, 19) : res.StationName;
-                Console.WriteLine($"| {stationName,-20} | {res.FactorStart:F1}-{res.FactorEnd:F1} | {res.DeltaQ:F8},{res.DeltaP:F8},{res.KB:F5} |");
-            }
-
-            Console.WriteLine(new string('=', 75));
-        }
-
-        /// <summary>
-        /// Сохраняет расчёт k_B в CSV-файл после основных результатов
-        /// </summary>
         public static void WriteKBToCsv(string csvPath, List<KBResult> kbResults)
         {
             try
             {
                 using (StreamWriter sw = File.AppendText(csvPath))
                 {
-                    // Добавляем пустую строку для отступа от основного блока
                     sw.WriteLine();
                     sw.WriteLine("// --- РАСЧЁТ КОЭФФИЦИЕНТА ВЛИЯНИЯ k_B ---");
-
-                    // Заголовок столбцов с разделителями точка с запятой
                     sw.WriteLine("Station;FactorStart;FactorEnd;DeltaQ;DeltaP;KB");
 
                     foreach (var res in kbResults)
                     {
-                        // === ИСПРАВЛЕНИЕ: ВСЕ ДЕЛЯТСЯ ТОЧКОЙ С ЗАПЯТОЙ ===
                         string line = $"{res.StationName};{res.FactorStart:F1};{res.FactorEnd:F1};{res.DeltaQ:F3};{res.DeltaP:F3};{res.KB:F4}";
                         sw.WriteLine(line);
                     }

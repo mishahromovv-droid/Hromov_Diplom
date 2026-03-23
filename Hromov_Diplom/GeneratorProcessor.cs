@@ -30,7 +30,6 @@ namespace Hromov_Diplom
 
                 double qmin = Convert.ToDouble(colQmin.Z[i]);
                 double qmaxOld = Convert.ToDouble(colQmax.Z[i]);
-                string name = colName.Z[i]?.ToString() ?? "Без имени";
 
                 colNumPQ.Z[i] = 0;
 
@@ -42,7 +41,6 @@ namespace Hromov_Diplom
                 modifications.Add(new
                 {
                     Num = num,
-                    Name = name,
                     Qmin = qmin,
                     QmaxOld = qmaxOld,
                     QmaxNew = qmaxNew

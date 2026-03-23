@@ -17,9 +17,20 @@ namespace Hromov_Diplom
 
         public void Initialize(string progId = "Astra.Rastr")
         {
-            Type type = Type.GetTypeFromProgID(progId);
-            if (type == null) throw new Exception($"COM-объект '{progId}' не зарегистрирован.");
-            _rastrObj = Activator.CreateInstance(type);
+            string[] possibleIds = { "Astra.Rastr", "RASTRA.Astra", "Astra.RastrWin3", "RASTRA.RastrWin3" };
+
+            foreach (string id in possibleIds)
+            {
+                Type type = Type.GetTypeFromProgID(id);
+                if (type != null)
+                {
+                    _rastrObj = Activator.CreateInstance(type);
+                    Console.WriteLine($"✓ COM-объект '{id}' найден и запущен!");
+                    return;
+                }
+            }
+
+            throw new Exception($"COM-объект 'Astra.Rastr' не зарегистрирован в системе.\nУбедитесь, что программа RASTRA запущена и её версия поддерживается.");
         }
 
         public void LoadModeFiles(string path)
