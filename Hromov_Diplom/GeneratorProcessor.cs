@@ -16,7 +16,7 @@ namespace Hromov_Diplom.GeneratorProcessing
 
         /// <summary>
         /// Инициализирует новый экземпляр класса <see cref="GeneratorProcessor"/>
-        /// </summary>
+        /// </summary> 
         /// <param name="targetGenNums">Массив номеров генераторов для обработки</param>
         /// <param name="stationName">Название станции (опционально)</param>
         /// <exception cref="ArgumentNullException">
