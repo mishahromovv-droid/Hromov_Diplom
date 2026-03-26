@@ -73,6 +73,9 @@ namespace Hromov_Diplom
 
             reportManager.WriteToFile(append: false);
             reportManager.PrintSummaryTable();
+            reportManager.PrintGeneratorParametersTable();
+            reportManager.PrintInfluenceCoefficients();
+            reportManager.ExportInfluenceCoefficientsToCsv(AppSettings.CsvPath.Replace(".csv", "_influence.csv"));
 
             Console.WriteLine($"\n[INFO] Результаты сохранены: {AppSettings.CsvPath}");
         }
@@ -123,6 +126,9 @@ namespace Hromov_Diplom
                 Console.Write("  [MOD] Модификация генераторов... ");
                 var modifications = processor.ApplyLimits(engine.RawObject, factor);
 
+                // ✅ Сохраняем изменения в отчёт
+                currentReport.GeneratorModifications = ConvertToModifications(modifications);
+
                 PrintModifications(modifications, stationName);
 
                 Console.WriteLine($"OK ({modifications.Count} шт.)");
@@ -164,6 +170,19 @@ namespace Hromov_Diplom
             }
 
             reporter.AddResult(currentReport);
+        }
+
+        static List<GeneratorModification> ConvertToModifications(
+            List<(int num, string name, double qmin, double qmaxOld, double qmaxNew)> mods)
+        {
+            return mods.ConvertAll(m => new GeneratorModification
+            {
+                Num = m.num,
+                Name = m.name,
+                Qmin = m.qmin,
+                QmaxOld = m.qmaxOld,
+                QmaxNew = m.qmaxNew
+            });
         }
 
         static void PrintResultConsole(CalculationResult result)

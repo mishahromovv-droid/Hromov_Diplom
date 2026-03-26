@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Hromov_Diplom",
+            "type": "clr",
+            "request": "launch",
+            "program": "${workspaceFolder}\\bin\\x86\\Debug\\Hromov_Diplom.exe",
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build-x86"
+        }
+    ]
+}

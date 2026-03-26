@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Hromov_Diplom.Models
 {
@@ -38,6 +39,37 @@ namespace Hromov_Diplom.Models
     }
 
     /// <summary>
+    /// Информация об изменении генератора
+    /// </summary>
+    public class GeneratorModification
+    {
+        /// <summary>
+        /// Номер генератора (Num)
+        /// </summary>
+        public int Num { get; set; }
+
+        /// <summary>
+        /// Название генератора
+        /// </summary>
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Qmin (не изменяется)
+        /// </summary>
+        public double Qmin { get; set; }
+
+        /// <summary>
+        /// Qmax до изменения
+        /// </summary>
+        public double QmaxOld { get; set; }
+
+        /// <summary>
+        /// Qmax после изменения
+        /// </summary>
+        public double QmaxNew { get; set; }
+    }
+
+    /// <summary>
     /// Отчёт по одной итерации расчёта МДП
     /// </summary>
     public class IterationReport
@@ -66,5 +98,10 @@ namespace Hromov_Diplom.Models
         /// Название станции/регулятора, для которой проводился расчёт
         /// </summary>
         public string StationName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Список изменений генераторов для данной итерации
+        /// </summary>
+        public List<GeneratorModification> GeneratorModifications { get; set; } = new();
     }
 }
