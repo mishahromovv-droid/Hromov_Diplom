@@ -29,6 +29,7 @@ namespace Hromov_Diplom.Reports
 
                 foreach (var report in _reports)
                 {
+
                     // ✅ Используем точку как разделитель (InvariantCulture)
                     string line = $"{report.StationName};" +                          // Станция
                                  $"{report.Factor.ToString("F1", CultureInfo.InvariantCulture)};" +  // 0.2 (точка!)

@@ -11,6 +11,9 @@ using Hromov_Diplom.GeneratorProcessing;
 
 namespace Hromov_Diplom
 {
+    /// <summary>
+    /// Главная программа для пакетного расчёта МДП
+    /// </summary>
     internal class Program
     {
         static void Main(string[] args)
