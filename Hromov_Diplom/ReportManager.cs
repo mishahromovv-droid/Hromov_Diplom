@@ -11,22 +11,15 @@ using System.Text;
 
 namespace Hromov_Diplom.Reports
 {
-    public static class StringExtensions
-    {
-        public static string Repeat(this string str, int count)
-        {
-            return string.Concat(Enumerable.Repeat(str, count));
-        }
-    }
-
     /// <summary>
-    /// Статический класс-экспортер данных генераторов
+    /// Статический класс-экспортер данных генераторов (без создания экземпляров new ReportManager())
     /// </summary>
     public static class ReportManager
     {
         /// <summary>
         /// Экспорт данных генераторов в чистом формате CSV (каждая колонка отдельно)
         /// Суммирование ТОЛЬКО для генераторов со ста=0
+        /// Теперь сумма Qmax выводится в колонку I (одной ячейкой левее)
         /// </summary>
         public static void ExportCleanDataWithSums(List<GeneratorReportData> allGenerators, string filePath)
         {
@@ -57,18 +50,29 @@ namespace Hromov_Diplom.Reports
                     double sumP = 0;
                     double sumQ = 0;
 
+                    // ✅ НОВАЯ ФУНКЦИОНАЛЬНОСТЬ: Считаем сумму Qmax для станции (по ВСЕМ генераторам без фильтра!)
+                    double sumQmax = 0;
+
                     foreach (var gen in generators)
                     {
-                        // Фильтр: учитываем только генераторы со статусом 0
+                        // Фильтр: учитываем только генераторы со статусом 0 для P и Q
                         if (gen.StatusFlag == 0)
                         {
                             sumP += gen.ActivePower;
                             sumQ += gen.ReactivePower;
                         }
+
+                        // Но Qmax считаем ПО ВСЕМ генераторам БЕЗ ФИЛЬТРОВ!
+                        sumQmax += gen.Qmax;
                     }
 
                     writer.WriteLine($">>> СТАНЦИЯ: {stationName}");
                     writer.WriteLine($"Всего генераторов: {generators.Count} шт.");
+
+                    int activeGenCount = generators.Count(g => g.StatusFlag != 0 || g.ActivePower != 0 || g.ReactivePower != 0);
+
+                    writer.WriteLine($"Активные генераторы: {activeGenCount} шт.");
+                    writer.WriteLine();
 
                     // Данные по каждому генератору
                     foreach (var gen in generators.OrderBy(g => g.GeneratorNum))
@@ -81,10 +85,11 @@ namespace Hromov_Diplom.Reports
                         writer.WriteLine($"{stationName};{gen.GeneratorNum:D3};\"{nameEscaped}\";{pStr};{qStr};{gen.Qmin:F0};{gen.Qmax:F0};{staStr}");
                     }
 
-                    // Строка с итоговой суммой для станции
                     writer.WriteLine("--------------------------------------------");
-                    writer.WriteLine($"СУММА;{stationName};;{sumP.ToString("F3", CultureInfo.InvariantCulture)};{Math.Abs(sumQ).ToString("F3", CultureInfo.InvariantCulture)};;;");
 
+                    // Строка с итоговой суммой для станции
+                    // ✅ ИЗМЕНЕНИЕ: Убран один лишний ";", теперь сумма Qmax будет в колонке H (под ста), а не I
+                    writer.WriteLine($"СУММА;{stationName};;-{Math.Abs(sumP):F3};{Math.Abs(sumQ):F3};;{sumQmax:F3};;");
                     writer.WriteLine();
                 }
 
@@ -93,14 +98,14 @@ namespace Hromov_Diplom.Reports
                 writer.WriteLine("ОБЩАЯ СВОДКА ПО ВСЕМ СТАНЦИЯМ");
                 writer.WriteLine("================================================================================");
 
-                // Учитываем только генераторы со статусом 0 и для общей сводки
-                double grandTotalP = allGenerators.Where(g => g.StatusFlag == 0).Sum(g => g.ActivePower);
-                double grandTotalQ = allGenerators.Where(g => g.StatusFlag == 0).Sum(g => g.ReactivePower);
+                // Считаем общую сумму Qmax для всех станций (все значения)
+                double grandTotalQmax = allGenerators.Sum(g => g.Qmax);
 
                 writer.WriteLine($"Общее количество обработанных генераторов: {allGenerators.Count} шт.");
                 writer.WriteLine($"Количество станций: {stationsGrouped.Count} шт.");
-                writer.WriteLine($"Суммарная активная мощность (P, ста=0): {grandTotalP:F3} МВт");
-                writer.WriteLine($"Суммарная реактивная мощность (Q, ста=0): {grandTotalQ:F3} Мвар");
+                writer.WriteLine($"Суммарная активная мощность (P, ста=0): {allGenerators.Where(g => g.StatusFlag == 0).Sum(g => Math.Abs(g.ActivePower)):F3} МВт");
+                writer.WriteLine($"Суммарная реактивная мощность (Q, ста=0): {allGenerators.Where(g => g.StatusFlag == 0).Sum(g => Math.Abs(g.ReactivePower)):F3} Мвар");
+                writer.WriteLine($"Сумма столбца Qmax (ВСЕГДА): {grandTotalQmax:F3} Мвар");
                 writer.WriteLine("=== КОНЕЦ ФАЙЛА ===");
 
                 Console.WriteLine($"✅ Чистые данные успешно сохранены в: {filePath}");
