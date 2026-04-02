@@ -11,6 +11,14 @@ using System.Text;
 
 namespace Hromov_Diplom.Reports
 {
+    public static class StringExtensions
+    {
+        public static string Repeat(this string str, int count)
+        {
+            return string.Concat(Enumerable.Repeat(str, count));
+        }
+    }
+
     /// <summary>
     /// Статический класс-экспортер данных генераторов (без создания экземпляров new ReportManager())
     /// </summary>
@@ -19,7 +27,8 @@ namespace Hromov_Diplom.Reports
         /// <summary>
         /// Экспорт данных генераторов в чистом формате CSV (каждая колонка отдельно)
         /// Суммирование ТОЛЬКО для генераторов со ста=0
-        /// Теперь сумма Qmax выводится в колонку I (одной ячейкой левее)
+        /// 5100 будет в колонке G (Qmax)
+        /// Сумма P будет ПОЛОЖИТЕЛЬНОЙ (без минуса!)
         /// </summary>
         public static void ExportCleanDataWithSums(List<GeneratorReportData> allGenerators, string filePath)
         {
@@ -50,7 +59,7 @@ namespace Hromov_Diplom.Reports
                     double sumP = 0;
                     double sumQ = 0;
 
-                    // ✅ НОВАЯ ФУНКЦИОНАЛЬНОСТЬ: Считаем сумму Qmax для станции (по ВСЕМ генераторам без фильтра!)
+                    // Считаем сумму Qmax для станции (по ВСЕМ генераторам без фильтра!)
                     double sumQmax = 0;
 
                     foreach (var gen in generators)
@@ -87,9 +96,9 @@ namespace Hromov_Diplom.Reports
 
                     writer.WriteLine("--------------------------------------------");
 
-                    // Строка с итоговой суммой для станции
-                    // ✅ ИЗМЕНЕНИЕ: Убран один лишний ";", теперь сумма Qmax будет в колонке H (под ста), а не I
-                    writer.WriteLine($"СУММА;{stationName};;-{Math.Abs(sumP):F3};{Math.Abs(sumQ):F3};;{sumQmax:F3};;");
+                    // ✅ ИСПРАВЛЕНО: Убрали минус перед sumP, теперь положительное значение
+                    // ✅ ИСПРАВЛЕНО: Правильная расстановка точек с запятой для переноса в колонку G
+                    writer.WriteLine($"СУММА;{stationName};;{Math.Abs(sumP):F3};{Math.Abs(sumQ):F3};;{sumQmax:F3}");
                     writer.WriteLine();
                 }
 
@@ -105,7 +114,6 @@ namespace Hromov_Diplom.Reports
                 writer.WriteLine($"Количество станций: {stationsGrouped.Count} шт.");
                 writer.WriteLine($"Суммарная активная мощность (P, ста=0): {allGenerators.Where(g => g.StatusFlag == 0).Sum(g => Math.Abs(g.ActivePower)):F3} МВт");
                 writer.WriteLine($"Суммарная реактивная мощность (Q, ста=0): {allGenerators.Where(g => g.StatusFlag == 0).Sum(g => Math.Abs(g.ReactivePower)):F3} Мвар");
-                writer.WriteLine($"Сумма столбца Qmax (ВСЕГДА): {grandTotalQmax:F3} Мвар");
                 writer.WriteLine("=== КОНЕЦ ФАЙЛА ===");
 
                 Console.WriteLine($"✅ Чистые данные успешно сохранены в: {filePath}");
