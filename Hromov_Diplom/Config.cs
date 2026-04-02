@@ -4,7 +4,7 @@ using System.IO;
 namespace Hromov_Diplom.Config
 {
     /// <summary>
-    /// Конфигурация одного средства регулирования напряжения (СРН)
+    /// Конфигурация одной станции для выгрузки данных о реактивной мощности
     /// </summary>
     public class RegulatorConfig
     {
@@ -14,29 +14,14 @@ namespace Hromov_Diplom.Config
         public string Name { get; set; } = string.Empty;
 
         /// <summary>
-        /// Номера генераторов, относящихся к этой станции
+        /// Номера генераторов этой станции
         /// </summary>
         public int[] GeneratorNums { get; set; } = Array.Empty<int>();
     }
 
-    /// <summary>
-    /// Настройки для таблицы ut_vir (ВИР)
-    /// </summary>
-    public static class VirSettings
-    {
-        public static readonly string TableName = "ut_vir";
-        public static readonly string ColumnName = "Act";
-        public static readonly int KeepNum = 54;
-    }
-
     public static class CalculationSettings
     {
-        public static readonly double[] ScaleFactors = new double[]
-        {
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
-        };
-
-        // ✅ ВСЕ СТАНЦИИ ДОБАВЛЕНЫ КОРРЕКТНО
+        // ✅ СПИСОК СТАНЦИЙ ДЛЯ ВЫГРУЗКИ
         public static readonly RegulatorConfig[] Stations = new[]
         {
             new RegulatorConfig
@@ -60,7 +45,7 @@ namespace Hromov_Diplom.Config
             new RegulatorConfig
             {
                 Name = "Западно-Сибирская ТЭЦ",
-                GeneratorNums = new[] { 88, 89, 90, 91, 92, 93, 94 } 
+                GeneratorNums = new[] { 88, 89, 90, 91, 92, 93, 94 }
             },
 
             new RegulatorConfig
@@ -71,7 +56,7 @@ namespace Hromov_Diplom.Config
 
             new RegulatorConfig
             {
-                Name = "Сургутская ГРЭС-1",
+                Name = "Cургутская ГРЭС-1",
                 GeneratorNums = new[] { 301, 302, 303, 304, 305, 306, 307, 308, 309, 310 }
             }
         };
@@ -79,9 +64,11 @@ namespace Hromov_Diplom.Config
 
     public static class AppSettings
     {
-        // ✅ ПУТИ ИСПРАВЛЕНЫ: УБРАНА КИРИЛЛИЦА ИЗ ПУТЕЙ!
-        public static readonly string BaseDirectory = @"C:\Users\Михаил\Desktop\Diplom_Hromov";
+        // ВАЖНО: Путь должен вести к реальной папке с файлами режима!
+        public static readonly string BaseDirectory = @"C:\Users\Михаил\Desktop\Diplom_Hромов";
         public static readonly string RegimeDirectory = Path.Combine(BaseDirectory, "mdp_debug_0");
-        public static readonly string CsvPath = Path.Combine(BaseDirectory, "results_mdp.csv");
+
+        // Путь сохранения результатов
+        public static readonly string OutputPath = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".", "generator_data_formatted.csv");
     }
 }
