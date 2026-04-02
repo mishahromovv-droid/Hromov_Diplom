@@ -152,9 +152,9 @@ namespace Hromov_Diplom.ComService
         {
             string[] possibleNames = new[]
             {
-                "Генераторы(УР)",
                 "Generator",
                 "Генераторы",
+                "Генераторы(УР)",
                 "Генераторы(ПУР)",
                 "Генераторы УР",
                 "Gens"

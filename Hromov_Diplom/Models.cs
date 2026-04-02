@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Hromov_Diplom.Models
 {
     /// <summary>
-    /// Структура данных для одного генератора
+    /// Структура данных для одного генератора (для экспорта CSV)
     /// </summary>
     public class GeneratorReportData
     {
