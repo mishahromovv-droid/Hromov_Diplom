@@ -14,17 +14,11 @@ using System.Text;
 
 namespace Hromov_Diplom.ComService
 {
-    /// <summary>
-    /// Класс для работы с RastrWin3 через COM
-    /// </summary>
     public class RastrEngine : IDisposable
     {
         private dynamic _rastrObj;
         private bool _isDisposed = false;
 
-        /// <summary>
-        /// Инициализация COM-объекта RastrWin3
-        /// </summary>
         public void Initialize(string progId = "Astra.Rastr")
         {
             Type type = Type.GetTypeFromProgID(progId);
@@ -34,9 +28,6 @@ namespace Hromov_Diplom.ComService
             _rastrObj = Activator.CreateInstance(type);
         }
 
-        /// <summary>
-        /// Загрузка файлов режима из указанной директории или файла
-        /// </summary>
         public void LoadModeFiles(string path)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentNullException(nameof(path));
@@ -57,12 +48,10 @@ namespace Hromov_Diplom.ComService
             }
         }
 
-        /// ✅ МЕТОД ДЛЯ ЭКСПОРТА ДАННЫХ ИЗ ТАБЛИЦЫ "ГЕНЕРАТОРЫ" С ДОБАВЛЕНИЕМ КОЛОНКИ 'STA'
         public void ExportGeneratorDataToCSV()
         {
             try
             {
-                // Создаем папку рядом с exe-файлом если она не существует
                 string outDir = Path.GetDirectoryName(AppSettings.OutputPath) ?? ".";
                 if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
 
@@ -73,7 +62,6 @@ namespace Hromov_Diplom.ComService
 
                 Console.WriteLine($"📊 Количество строк в таблице: {genTable.Count}");
 
-                // Получаем колонки
                 var colNum = genTable.Cols("Num");
                 var colName = genTable.Cols("Name");
                 var colP = genTable.Cols("P");
@@ -81,7 +69,6 @@ namespace Hromov_Diplom.ComService
                 var colQmin = genTable.Cols("Qmin");
                 var colQmax = genTable.Cols("Qmax");
 
-                // Попытка найти колонку 'sta'
                 dynamic colSta = null;
                 try
                 {
@@ -93,14 +80,12 @@ namespace Hromov_Diplom.ComService
                     Console.WriteLine($"⚠ Столбец 'sta' не найден ({ex.Message}), продолжаем без него.");
                 }
 
-                // Группируем данные по станциям
                 List<GeneratorReportData> generators = new List<GeneratorReportData>();
 
                 for (int i = 0; i < genTable.Count; i++)
                 {
                     int num = Convert.ToInt32(colNum.Z[i]);
 
-                    // Ищем, какая станция соответствует этому номеру
                     var config = CalculationSettings.Stations.FirstOrDefault(s => s.GeneratorNums.Contains(num));
 
                     if (config != null)
@@ -135,7 +120,6 @@ namespace Hromov_Diplom.ComService
 
                 Console.WriteLine($"✅ Обработано генераторов: {generators.Count} шт.\n");
 
-                // ✅ СТАТИЧЕСКИЙ ВЫЗОВ МЕТОДА БЕЗ CREATE INSTACE!
                 ReportManager.ExportCleanDataWithSums(generators, filePath);
 
                 Console.WriteLine($"✅ Данные успешно сохранены в: {filePath}");
@@ -147,7 +131,6 @@ namespace Hromov_Diplom.ComService
             }
         }
 
-        /// ✅ МЕТОД ДЛЯ ПОИСКА ТАБЛИЦЫ "ГЕНЕРАТОРЫ" С АЛЬТЕРНАТИВНЫМИ ИМЕНАМИ
         private dynamic FindGeneratorTable()
         {
             string[] possibleNames = new[]
@@ -181,9 +164,6 @@ namespace Hromov_Diplom.ComService
             throw new Exception("Не удалось найти таблицу 'Генераторы'. Проверьте настройки режима.");
         }
 
-        /// <summary>
-        /// Освобождение ресурсов COM-объекта
-        /// </summary>
         public void Dispose()
         {
             if (!_isDisposed && _rastrObj != null)

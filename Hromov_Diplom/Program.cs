@@ -36,7 +36,6 @@ namespace Hromov_Diplom
                 rastrEngine.LoadModeFiles(AppSettings.RegimeDirectory);
                 Console.WriteLine("OK\n");
 
-                // Выгрузка с чистым оформлением
                 Console.WriteLine("[3] Создание отчета о генераторах...\n");
 
                 rastrEngine.ExportGeneratorDataToCSV();
