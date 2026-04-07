@@ -1,7 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Collections.Generic;
+using System.Text;
 
 namespace Hromov_Diplom
 {
@@ -11,13 +12,16 @@ namespace Hromov_Diplom
         {
             CultureInfo.CurrentCulture = new CultureInfo("ru-RU");
             CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("ru-RU");
-            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.OutputEncoding = Encoding.UTF8;
 
             Console.WriteLine("==========================================");
             Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
             Console.WriteLine("==========================================\n");
 
-            var engine = new RastrEngine();
+            var reports = new List<IterationReport>();
+            var reportManager = new ReportManager(AppSettings.CsvPath);
+
+            using var engine = new RastrEngine();
 
             try
             {
@@ -46,9 +50,6 @@ namespace Hromov_Diplom
                 return;
             }
 
-            var reportManager = new ReportManager(AppSettings.CsvPath);
-            List<GenNodeConnection> allConnections = new List<GenNodeConnection>();
-
             foreach (var station in CalculationSettings.Stations)
             {
                 Console.WriteLine(new string('=', 70));
@@ -56,63 +57,66 @@ namespace Hromov_Diplom
                 Console.WriteLine($"   Генераторы: {string.Join(", ", station.GeneratorNums)}");
                 Console.WriteLine(new string('=', 70));
 
-                // Чтение связей
-                var connections = VoltageAnalyzer.GetConnections(engine.RawObject, station.GeneratorNums, station.Name, station.Code);
-                allConnections.AddRange(connections);
-
-                if (connections.Count > 0)
-                {
-                    Console.WriteLine("\n🔗 СВЯЗИ ГЕНЕРАТОРОВ:");
-                    foreach (var conn in connections)
-                    {
-                        string connectionText = $" | Г-{conn.GenNum,-3} → Узел {conn.NodeNum,-4} | {conn.GenName,-30} | {conn.StationName}, {conn.StationCode} |";
-                        Console.WriteLine(connectionText);
-                    }
-                    Console.WriteLine();
-                }
-
                 foreach (var factor in CalculationSettings.ScaleFactors)
                 {
                     Console.WriteLine($"\n# КОЭФФИЦИЕНТ: {factor:F1} | {station.Name}");
 
                     var rep = RunOneIteration(station.Name, station.GeneratorNums, factor, engine);
+                    reports.Add(rep);
                     reportManager.AddResult(rep);
                 }
 
                 Console.WriteLine();
             }
 
-            // Основные результаты
             Console.WriteLine("\n>>> Сохранение основных результатов в CSV...\n");
             reportManager.PrintSummaryTable(AppSettings.RequiredReservePct);
 
             string finalCsvPath = reportManager.GetFinalCsvPath();
             reportManager.WriteToFile(AppSettings.RequiredReservePct);
 
-            // СОХРАНЕНИЕ СВЯЗЕЙ ПОСЛЕ ОСНОВНЫХ ДАННЫХ
-            Console.WriteLine(">>> Сохранение связей в конец CSV файла...");
-            VoltageAnalyzer.SaveConnectionsToCsv(allConnections, finalCsvPath);
-
             Console.WriteLine("\n\n>>> Расчёт коэффициента влияния k_B...\n");
             Console.WriteLine("(Убедитесь, что Excel закрыт перед запуском, иначе данные не запишутся!)");
 
-            var kbResults = InfluenceCoefficientCalculator.CalculateKBForAllStations(reportManager.GetReports());
+            var individualKBResults = InfluenceCoefficientCalculator.CalculateKBForAllStations(reports);
+            var groupKBResults = InfluenceCoefficientCalculator.CalculateGroupKBForAllStations(reports);
 
-            if (kbResults.Count > 0)
+            if (individualKBResults.Count > 0)
             {
                 try
                 {
-                    InfluenceCoefficientCalculator.WriteKBToCsv(finalCsvPath, kbResults);
-                    Console.WriteLine($"✅ Коэффициенты k_B записаны в: {finalCsvPath}");
+                    InfluenceCoefficientCalculator.WriteKBToCsv(finalCsvPath, individualKBResults);
+                    Console.WriteLine($"✅ Индивидуальные коэффициенты записаны в: {finalCsvPath}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"❌ Ошибка записи k_B: {ex.Message}");
+                    Console.WriteLine($"❌ Ошибка записи индивидуальных k_B: {ex.Message}");
                 }
             }
             else
             {
-                Console.WriteLine("⚠️ Нет данных для расчёта k_B.");
+                Console.WriteLine("⚠️ Нет данных для расчёта индивидуальных k_B.");
+            }
+
+            if (groupKBResults.Count > 0)
+            {
+                Console.WriteLine("\n" + new string('-', 90));
+                Console.WriteLine("              ТАБЛИЦА ГРУППОВЫХ КОЭФФИЦИЕНТОВ ВЛИЯНИЯ (K_B)");
+                Console.WriteLine(new string('-', 90));
+                Console.WriteLine($"| {"Станция",-40} | {"M",3} | {"Интервалы",9} | {"K_B (Среднее)",15} |");
+                Console.WriteLine(new string('-', 90));
+
+                foreach (var item in groupKBResults.OrderBy(x => x.StationName))
+                {
+                    Console.WriteLine($"| {item.StationName,-40} | {item.M,3} | {item.IntervalsCount,9} | {item.GroupKB,15:F6} |");
+                }
+                Console.WriteLine(new string('-', 90) + "\n");
+
+                InfluenceCoefficientCalculator.WriteGroupKBToCsv(finalCsvPath, groupKBResults);
+            }
+            else
+            {
+                Console.WriteLine("⚠️ Нет данных для расчёта групповых коэффициентов.");
             }
 
             Console.WriteLine("\nГотово. Нажмите Enter для выхода...");
@@ -162,10 +166,12 @@ namespace Hromov_Diplom
                 report.Result.PrabSech17 = prab;
                 Console.WriteLine($"  [SECH] Pраб в сечении {AppSettings.PrabSectionNum}: {(prab > 0 ? prab.ToString("F3") : "НЕ НАЙДЕНО")}");
 
+                // ✅ ЧТЕНИЕ Q-ПАРАМЕТРОВ ИЗ ТАБЛИЦЫ GENERATOR
                 QTotals qt = processor.GetQTotals(engineInstance.RawObject);
                 report.Result.QminTotal = qt.QminTotal;
                 report.Result.QmaxTotal = qt.QmaxTotal;
-                report.Result.QrangeTotal = qt.QrangeTotal;
+
+                Console.WriteLine($"  [Q] Qmin={qt.QminTotal:F3}, Qmax={qt.QmaxTotal:F3}, Qrange={qt.QrangeTotal:F3}");
 
                 Console.WriteLine("  [CALC] Расчёт МДП...");
                 engineInstance.CalculateEmergencies();
@@ -184,7 +190,7 @@ namespace Hromov_Diplom
                 report.Result.PadpReal = res.PadpReal;
                 report.Result.ItogMdp = res.ItogMdp;
                 report.Result.ItogMdpPa = res.ItogMdpPa;
-                 
+
                 if (report.Result.ItogMdp > 0)
                 {
                     report.Status = "OK";

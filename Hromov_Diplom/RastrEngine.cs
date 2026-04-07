@@ -153,7 +153,7 @@ namespace Hromov_Diplom
                     }
                 }
             }
-            catch { /* Пропускаем ошибки */ }
+            catch { }
 
             return result;
         }

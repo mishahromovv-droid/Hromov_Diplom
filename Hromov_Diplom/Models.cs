@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace Hromov_Diplom
 {
@@ -11,7 +12,7 @@ namespace Hromov_Diplom
         public double PrabSech17 { get; set; }
         public double QminTotal { get; set; }
         public double QmaxTotal { get; set; }
-        public double QrangeTotal { get; set; }
+        public double QrangeTotal => QmaxTotal - QminTotal;
         public double ReservePct { get; set; }
         public bool MeetsRequiredReserve { get; set; }
         public bool IsMinReactivePick { get; set; }
@@ -33,15 +34,20 @@ namespace Hromov_Diplom
         public double QminTotal;
         public double QmaxTotal;
         public double QrangeTotal => QmaxTotal - QminTotal;
-        public QTotals(double qminTotal, double qmaxTotal) { QminTotal = qminTotal; QmaxTotal = qmaxTotal; }
+
+        public QTotals(double qminTotal, double qmaxTotal)
+        {
+            QminTotal = qminTotal;
+            QmaxTotal = qmaxTotal;
+        }
     }
 
     public struct GenNodeConnection
     {
-        public int GenNum;           // Номер генератора
-        public string GenName;       // Имя из таблицы Generator
-        public int NodeNum;          // Номер узла
-        public string StationName;   // Название станции
-        public string StationCode;   // Код станции
+        public int GenNum;
+        public string GenName;
+        public int NodeNum;
+        public string StationName;
+        public string StationCode;
     }
 }

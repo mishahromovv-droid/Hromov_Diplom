@@ -19,7 +19,7 @@ namespace Hromov_Diplom
             {
                 if (File.Exists(_csvPath)) File.Delete(_csvPath);
             }
-            catch { /* Ошибки игнорируем */ }
+            catch { }
         }
 
         public string GetFinalCsvPath()
@@ -82,7 +82,7 @@ namespace Hromov_Diplom
             {
                 string stationShort = r.StationName.Length > 12 ? r.StationName.Substring(0, 12) : r.StationName;
                 Console.WriteLine(
-                    $"| {stationShort,-12} | {r.Factor,6:F1} | {Fmt(r.Result.PrabSech17),10} | {Fmt(r.Result.ItogMdp),10} |" +
+                    $"| {stationShort,-12} | {r.Factor.ToString("F1", CultureInfo.InvariantCulture),6} | {Fmt(r.Result.PrabSech17),10} | {Fmt(r.Result.ItogMdp),10} |" +
                     $" {Fmt(r.Result.QmaxTotal),10} | {Fmt(r.Result.QrangeTotal),10} | {Fmt(r.Result.ReservePct),8} |" +
                     $" {FmtBool(r.Result.MeetsRequiredReserve),6} | {FmtBoolShort(r.Result.IsMinReactivePick),3} |"
                 );
@@ -144,9 +144,8 @@ namespace Hromov_Diplom
             }
         }
 
-        private static string Fmt(double v) => v.ToString("F3").Replace(",", ".").Replace(".", ",");
-        private static string FmtCsv(double v) => v.ToString("F3").Replace(",", ".").Replace(".", ",");
-
+        private static string Fmt(double v) => v.ToString("F3", CultureInfo.InvariantCulture);
+        private static string FmtCsv(double v) => v.ToString("F3", CultureInfo.InvariantCulture);
         private static string FmtBool(bool v) => v ? "YES" : "NO";
         private static string FmtBoolShort(bool v) => v ? "Y" : "-";
         private static string FmtBoolCsv(bool v) => v ? "YES" : "NO";

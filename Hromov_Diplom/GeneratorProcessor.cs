@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Hromov_Diplom
 {
@@ -16,7 +17,6 @@ namespace Hromov_Diplom
         {
             var genTable = rastr.Tables("Generator");
             var colNum = genTable.Cols("Num");
-            var colName = genTable.Cols("Name");
             var colQmin = genTable.Cols("Qmin");
             var colQmax = genTable.Cols("Qmax");
             var colNumPQ = genTable.Cols("NumPQ");
