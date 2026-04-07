@@ -543,7 +543,7 @@ namespace Hromov_Diplom.Config
 
     public static class AppSettings
     {
-        public static readonly string BaseDirectory = @"C:\Users\Михаил\Desktop\Diplom_Hромов";
+        public static readonly string BaseDirectory = @"C:\Users\Михаил\Desktop\Diplom_Hromov";
         public static readonly string RegimeDirectory = Path.Combine(BaseDirectory, "mdp_debug_0");
         public static readonly string OutputPath = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".", "generator_data_formatted.csv");
     }
