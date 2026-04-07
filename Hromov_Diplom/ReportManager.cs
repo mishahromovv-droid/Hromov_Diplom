@@ -39,10 +39,15 @@ namespace Hromov_Diplom.Reports
         }
     }
 
+    /// <summary>
+    /// Менеджер отчётов с поддержкой пошагового сохранения
+    /// </summary>
     public class ReportManager
     {
         private readonly List<IterationReport> _reports = new();
         private readonly string _csvPath;
+        private bool _headerWritten = false;
+        private StreamWriter? _fileWriter;
 
         public ReportManager(string csvPath)
         {
@@ -50,14 +55,64 @@ namespace Hromov_Diplom.Reports
                 throw new ArgumentException("Путь к CSV-файлу не может быть пустым", nameof(csvPath));
 
             _csvPath = csvPath;
+
+            // Открываем файл для записи (заголовок будет написан на первой добавке)
+            var directoryPath = Path.GetDirectoryName(_csvPath);
+            if (!string.IsNullOrEmpty(directoryPath) && !Directory.Exists(directoryPath))
+            {
+                Directory.CreateDirectory(directoryPath);
+            }
         }
 
-        public void AddResult(IterationReport report) => _reports.Add(report);
+        public void AddResult(IterationReport report)
+        {
+            _reports.Add(report);
+            // ✅ САМОСТОЯТЕЛЬНОЕ СОХРАНЕНИЕ после добавления
+            AppendRow(report);
+        }
+
+        /// <summary>
+        /// Добавляет одну строку в CSV-файл без перезаписи всего файла
+        /// </summary>
+        private void AppendRow(IterationReport report)
+        {
+            try
+            {
+                using var writer = new StreamWriter(_csvPath, true, Encoding.UTF8);
+
+                // Пишем заголовок только один раз
+                if (!_headerWritten)
+                {
+                    writer.WriteLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
+                    _headerWritten = true;
+                }
+
+                // Записываем текущую строку
+                string station = report.StationName?.Replace(";", ",") ?? "";
+                string line = $"{station};" +
+                             $"{report.Factor.ToString("F1", CultureInfo.InvariantCulture)};" +
+                             $"{FormatVal(report.Result.Pred)};" +
+                             $"{FormatVal(report.Result.PadpReal)};" +
+                             $"{FormatVal(report.Result.ItogMdp)};" +
+                             $"{FormatVal(report.Result.ItogMdpPa)};" +
+                             $"{report.Status}";
+
+                writer.WriteLine(line);
+                writer.Flush(); // Принудительно сохраняем в буфер
+
+                Console.WriteLine($"[SAVE] Строка сохранена: {station} | F={report.Factor:F1}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN] Не удалось сохранить строку: {ex.Message}");
+            }
+        }
 
         public bool WriteMainResults()
         {
             try
             {
+                // Если данные уже писались пошагово, этот метод можно опустить или использовать для финальной проверки
                 var sb = new StringBuilder();
                 sb.AppendLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
 
