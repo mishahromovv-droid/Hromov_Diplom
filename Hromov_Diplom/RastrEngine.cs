@@ -1,4 +1,3 @@
-// ⚠️ ВАЖНО: Добавлено DISABLE для аннотаций nullable
 #nullable disable 
 
 using Hromov_Diplom.Config;
@@ -22,21 +21,17 @@ namespace Hromov_Diplom.ComService
         public void Initialize(string progId = "Astra.Rastr")
         {
             Type type = Type.GetTypeFromProgID(progId);
-            if (type == null)
-                throw new Exception($"COM-объект '{progId}' не зарегистрирован!");
-
+            if (type == null) throw new Exception($"COM-объект '{progId}' не зарегистрирован!");
             _rastrObj = Activator.CreateInstance(type);
         }
 
         public void LoadModeFiles(string path)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentNullException(nameof(path));
-
             if (!File.Exists(path) && !Directory.Exists(path))
                 throw new DirectoryNotFoundException($"Файлы режима не найдены: {path}");
 
             Console.WriteLine("⏳ Загрузка файла режима...");
-
             if (File.Exists(path))
             {
                 _rastrObj.Load(1, path, "");
@@ -56,10 +51,8 @@ namespace Hromov_Diplom.ComService
                 if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
 
                 string filePath = AppSettings.OutputPath;
-
                 Console.WriteLine("⏳ Поиск таблицы генераторов...");
                 var genTable = FindGeneratorTable();
-
                 Console.WriteLine($"📊 Количество строк в таблице: {genTable.Count}");
 
                 var colNum = genTable.Cols("Num");
@@ -70,22 +63,14 @@ namespace Hromov_Diplom.ComService
                 var colQmax = genTable.Cols("Qmax");
 
                 dynamic colSta = null;
-                try
-                {
-                    colSta = genTable.Cols("sta");
-                    Console.WriteLine("✅ Столбец 'sta' найден и добавлен в экспорт.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"⚠ Столбец 'sta' не найден ({ex.Message}), продолжаем без него.");
-                }
+                try { colSta = genTable.Cols("sta"); Console.WriteLine("✅ Столбец 'sta' найден."); }
+                catch { Console.WriteLine("⚠ Столбец 'sta' не найден, продолжаем без него."); }
 
                 List<GeneratorReportData> generators = new List<GeneratorReportData>();
 
                 for (int i = 0; i < genTable.Count; i++)
                 {
                     int num = Convert.ToInt32(colNum.Z[i]);
-
                     var config = CalculationSettings.Stations.FirstOrDefault(s => s.GeneratorNums.Contains(num));
 
                     if (config != null)
@@ -96,17 +81,11 @@ namespace Hromov_Diplom.ComService
                         double q = Convert.ToDouble(colQ?.Z[i] ?? 0);
 
                         int staValue = 0;
-                        if (colSta != null)
-                        {
-                            try { staValue = Convert.ToInt32(colSta.Z[i]); }
-                            catch { /* Игнорируем ошибку чтения */ }
-                        }
-
-                        string stName = config.Name;
+                        if (colSta != null) try { staValue = Convert.ToInt32(colSta.Z[i]); } catch { }
 
                         generators.Add(new GeneratorReportData
                         {
-                            StationName = stName,
+                            StationName = config.Name,
                             GeneratorNum = num,
                             Name = colName.Z[i]?.ToString() ?? "",
                             ActivePower = p,
@@ -119,47 +98,33 @@ namespace Hromov_Diplom.ComService
                 }
 
                 Console.WriteLine($"✅ Обработано генераторов: {generators.Count} шт.\n");
-
                 ReportManager.ExportCleanDataWithSums(generators, filePath);
 
-                Console.WriteLine($"✅ Данные успешно сохранены в: {filePath}");
+                // ✅ АВТОМАТИЧЕСКИЙ ЭКСПОРТ СВОДНОЙ ТАБЛИЦЫ
+                string summaryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "station_q_summary.csv");
+                ReportManager.ExportStationQSummary(generators, summaryPath);
+
+                Console.WriteLine($"\n✅ Данные успешно сохранены в: {filePath}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"❌ Критическая ошибка экспорта: {ex.Message}");
-                Console.WriteLine($"{ex.StackTrace}");
+                Console.WriteLine(ex.StackTrace);
             }
         }
 
         private dynamic FindGeneratorTable()
         {
-            string[] possibleNames = new[]
-            {
-                "Generator",
-                "Генераторы",
-                "Генераторы(УР)",
-                "Генераторы(ПУР)",
-                "Генераторы УР",
-                "Gens"
-            };
-
+            string[] possibleNames = new[] { "Generator", "Генераторы", "Генераторы(УР)", "Генераторы(ПУР)", "Генераторы УР", "Gens" };
             foreach (var tableName in possibleNames)
             {
                 try
                 {
                     var table = _rastrObj.Tables(tableName);
-                    if (table != null && table.Count > 0)
-                    {
-                        Console.WriteLine($"✅ Найдена таблица: {tableName}");
-                        return table;
-                    }
+                    if (table != null && table.Count > 0) { Console.WriteLine($"✅ Найдена таблица: {tableName}"); return table; }
                 }
-                catch
-                {
-                    continue;
-                }
+                catch { continue; }
             }
-
             Console.WriteLine("⚠️ Таблицы генераторов не найдены!");
             throw new Exception("Не удалось найти таблицу 'Генераторы'. Проверьте настройки режима.");
         }
