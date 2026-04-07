@@ -1,10 +1,7 @@
 using System;
-using System.Globalization;
-using System.IO;
 using System.Text;
 using Hromov_Diplom.ComService;
 using Hromov_Diplom.Config;
-using Hromov_Diplom.Models;
 using Hromov_Diplom.Reports;
 
 namespace Hromov_Diplom
@@ -19,26 +16,35 @@ namespace Hromov_Diplom
         static void Run()
         {
             Console.OutputEncoding = Encoding.UTF8;
+            Console.InputEncoding = Encoding.UTF8;
 
             try
             {
                 Console.WriteLine("==============================================================================");
-                Console.WriteLine("               ЗАГРУЗКА РЕЖИМА И ВЫГРУЗКА ДАННЫХ О ГЕНЕРАТОРАХ               ");
+                Console.WriteLine("     ЗАГРУЗКА РЕЖИМА → ЗАНУЛЕНИЕ ВИР → РАСЧЁТ МДП → ЭКСПОРТ ДАННЫХ          ");
                 Console.WriteLine("==============================================================================\n");
 
                 using var rastrEngine = new RastrEngine();
 
                 Console.Write("[1] Инициализация RastrWin3... ");
                 rastrEngine.Initialize();
-                Console.WriteLine("OK\n");
+                Console.WriteLine("OK");
 
-                Console.Write($"[2] Загрузка режима из: {AppSettings.RegimeDirectory}... ");
+                Console.Write("[2] Загрузка режима... ");
                 rastrEngine.LoadModeFiles(AppSettings.RegimeDirectory);
-                Console.WriteLine("OK\n");
+                Console.WriteLine("OK");
 
-                Console.WriteLine("[3] Создание отчета о генераторах...\n");
+                Console.Write("[3] Зануление ВИР (кроме №54)... ");
+                rastrEngine.ZeroOutVirtualRegulators(excludeVirNum: 54);
+                Console.WriteLine("OK");
 
+                Console.Write("[4] Расчёт МДП... ");
+                rastrEngine.CalculateMDP();
+                Console.WriteLine("OK");
+
+                Console.Write("[5] Экспорт данных генераторов... ");
                 rastrEngine.ExportGeneratorDataToCSV();
+                Console.WriteLine("OK");
 
                 Console.WriteLine("\n==============================================================================");
                 Console.WriteLine("                         ЗАДАЧА ВЫПОЛНЕНА УСПЕШНО!                              ");
@@ -49,8 +55,7 @@ namespace Hromov_Diplom
             catch (Exception ex)
             {
                 Console.WriteLine($"\n❌ ОШИБКА: {ex.Message}\n");
-                Console.WriteLine("Проверьте путь к файлам режима в AppSettings.RegimeDirectory");
-                Console.WriteLine("Нажмите любую клавишу...");
+                Console.WriteLine("Для выхода нажмите любую клавишу...");
                 Console.ReadKey();
             }
         }

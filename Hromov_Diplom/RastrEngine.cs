@@ -5,7 +5,6 @@ using Hromov_Diplom.Models;
 using Hromov_Diplom.Reports;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -31,15 +30,102 @@ namespace Hromov_Diplom.ComService
             if (!File.Exists(path) && !Directory.Exists(path))
                 throw new DirectoryNotFoundException($"Файлы режима не найдены: {path}");
 
-            Console.WriteLine("⏳ Загрузка файла режима...");
-            if (File.Exists(path))
-            {
-                _rastrObj.Load(1, path, "");
-            }
+            if (File.Exists(path)) _rastrObj.Load(1, path, "");
             else if (Directory.Exists(path))
             {
                 foreach (string file in Directory.GetFiles(path).OrderBy(f => f))
                     if (!Path.GetFileName(file).StartsWith("~")) _rastrObj.Load(1, file, "");
+            }
+        }
+
+        public void ZeroOutVirtualRegulators(int excludeVirNum = 54)
+        {
+            dynamic virTable = null;
+            string foundName = null;
+            var keywords = new[] { "ВИР", "Virtual", "Regulator", "Vir", "VR", "Вирт", "Регулятор", "VirtReg" };
+
+            // 🔍 Автопоиск таблицы ВИР через COM-коллекцию
+            try
+            {
+                var tablesCol = _rastrObj.Tables;
+                int count = tablesCol.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    try
+                    {
+                        string name = tablesCol(i).Name;
+                        if (keywords.Any(k => name.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0))
+                        {
+                            foundName = name;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            string name = tablesCol[i].Name;
+                            if (keywords.Any(k => name.IndexOf(k, StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                foundName = name;
+                                break;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+
+            // 🔄 Фолбэк: прямой перебор имён
+            if (foundName == null)
+            {
+                string[] fallbackNames = { "ВИР", "Виртуальные регуляторы", "Vir", "VR", "VIR_UR", "VirtualRegulators", "Регуляторы", "Regulators", "ВИР(УР)", "ВиртРег", "VirtualReg", "Регуляторы(В)", "Virtual_Regulators", "ВР", "VR_Table" };
+                foreach (var name in fallbackNames)
+                {
+                    try
+                    {
+                        var t = _rastrObj.Tables(name);
+                        if (t != null && t.Count > 0) { foundName = name; break; }
+                    }
+                    catch { }
+                }
+            }
+
+            if (foundName == null) return;
+            try { virTable = _rastrObj.Tables(foundName); } catch { return; }
+
+            dynamic colNum = null, colP = null, colQ = null;
+            foreach (var c in new[] { "Num", "NUM", "num", "№", "ID", "Number" }) try { colNum = virTable.Cols(c); if (colNum != null) break; } catch { }
+            foreach (var c in new[] { "P", "P_MW", "p", "Power", "Pgen" }) try { colP = virTable.Cols(c); if (colP != null) break; } catch { }
+            foreach (var c in new[] { "Q", "Q_MVAR", "q", "Reactive", "Qgen" }) try { colQ = virTable.Cols(c); if (colQ != null) break; } catch { }
+
+            if (colNum == null || colP == null || colQ == null) return;
+
+            for (int i = 0; i < virTable.Count; i++)
+            {
+                try
+                {
+                    int num = Convert.ToInt32(colNum.Z[i]);
+                    if (num != excludeVirNum) { colP.Z[i] = 0.0; colQ.Z[i] = 0.0; }
+                }
+                catch { }
+            }
+            try { _rastrObj.Save(1, "", ""); } catch { }
+        }
+
+        public void CalculateMDP()
+        {
+            // ✅ ПРАВИЛЬНЫЙ ВЫЗОВ МДП (из кода твоего друга)
+            try
+            {
+                _rastrObj.emergencies("");
+            }
+            catch
+            {
+                // Если emergencies не сработает, пробуем запасные варианты
+                try { _rastrObj.Calc(0); }
+                catch { try { _rastrObj.Calc(1); } catch { } }
             }
         }
 
@@ -51,9 +137,7 @@ namespace Hromov_Diplom.ComService
                 if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
 
                 string filePath = AppSettings.OutputPath;
-                Console.WriteLine("⏳ Поиск таблицы генераторов...");
                 var genTable = FindGeneratorTable();
-                Console.WriteLine($"📊 Количество строк в таблице: {genTable.Count}");
 
                 var colNum = genTable.Cols("Num");
                 var colName = genTable.Cols("Name");
@@ -63,8 +147,7 @@ namespace Hromov_Diplom.ComService
                 var colQmax = genTable.Cols("Qmax");
 
                 dynamic colSta = null;
-                try { colSta = genTable.Cols("sta"); Console.WriteLine("✅ Столбец 'sta' найден."); }
-                catch { Console.WriteLine("⚠ Столбец 'sta' не найден, продолжаем без него."); }
+                try { colSta = genTable.Cols("sta"); } catch { }
 
                 List<GeneratorReportData> generators = new List<GeneratorReportData>();
 
@@ -75,41 +158,27 @@ namespace Hromov_Diplom.ComService
 
                     if (config != null)
                     {
-                        double qmin = Convert.ToDouble(colQmin.Z[i]);
-                        double qmax = Convert.ToDouble(colQmax.Z[i]);
-                        double p = Convert.ToDouble(colP?.Z[i] ?? 0);
-                        double q = Convert.ToDouble(colQ?.Z[i] ?? 0);
-
-                        int staValue = 0;
-                        if (colSta != null) try { staValue = Convert.ToInt32(colSta.Z[i]); } catch { }
-
                         generators.Add(new GeneratorReportData
                         {
                             StationName = config.Name,
                             GeneratorNum = num,
                             Name = colName.Z[i]?.ToString() ?? "",
-                            ActivePower = p,
-                            ReactivePower = q,
-                            Qmin = qmin,
-                            Qmax = qmax,
-                            StatusFlag = staValue
+                            ActivePower = Convert.ToDouble(colP?.Z[i] ?? 0),
+                            ReactivePower = Convert.ToDouble(colQ?.Z[i] ?? 0),
+                            Qmin = Convert.ToDouble(colQmin.Z[i]),
+                            Qmax = Convert.ToDouble(colQmax.Z[i]),
+                            StatusFlag = colSta != null ? Convert.ToInt32(colSta.Z[i]) : 0
                         });
                     }
                 }
 
-                Console.WriteLine($"✅ Обработано генераторов: {generators.Count} шт.\n");
                 ReportManager.ExportCleanDataWithSums(generators, filePath);
-
-                // ✅ АВТОМАТИЧЕСКИЙ ЭКСПОРТ СВОДНОЙ ТАБЛИЦЫ
                 string summaryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "station_q_summary.csv");
                 ReportManager.ExportStationQSummary(generators, summaryPath);
-
-                Console.WriteLine($"\n✅ Данные успешно сохранены в: {filePath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Критическая ошибка экспорта: {ex.Message}");
-                Console.WriteLine(ex.StackTrace);
+                Console.WriteLine($"❌ Ошибка экспорта: {ex.Message}");
             }
         }
 
@@ -121,12 +190,11 @@ namespace Hromov_Diplom.ComService
                 try
                 {
                     var table = _rastrObj.Tables(tableName);
-                    if (table != null && table.Count > 0) { Console.WriteLine($"✅ Найдена таблица: {tableName}"); return table; }
+                    if (table != null && table.Count > 0) return table;
                 }
                 catch { continue; }
             }
-            Console.WriteLine("⚠️ Таблицы генераторов не найдены!");
-            throw new Exception("Не удалось найти таблицу 'Генераторы'. Проверьте настройки режима.");
+            throw new Exception("Таблица генераторов не найдена!");
         }
 
         public void Dispose()
