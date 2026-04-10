@@ -88,6 +88,17 @@ namespace Hromov_Diplom.Config
                 Name = " Красноярская ТЭЦ-3",
                 GeneratorNums = new[] {182}
             },
+           new RegulatorConfig
+            {
+                Name = "Усть-Илимская ГЭС",
+                GeneratorNums = new[] { 359, 360, 361, 362, 363, 364, 365, 366, 367, 368, 369, 370, 371, 372, 373, 374 }
+            },
+           new RegulatorConfig
+            {
+                Name = "Усть-Илимская ТЭЦ",
+                GeneratorNums = new[] { 375, 376, 377, 378, 379 }
+            },
+
 
         };
     }
