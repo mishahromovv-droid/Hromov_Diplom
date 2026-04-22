@@ -173,8 +173,14 @@ namespace Hromov_Diplom.ComService
                 }
 
                 ReportManager.ExportCleanDataWithSums(generators, filePath);
-                string summaryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "station_q_summary.csv");
+
+                // ✅ ИЗМЕНЕНО: Сводная таблица теперь называется Ytog.csv и сохраняется в BaseDirectory
+                string summaryPath = Path.Combine(AppSettings.BaseDirectory, "Ytog_Utythelenie_bez_Vzd.csv");
                 ReportManager.ExportStationQSummary(generators, summaryPath);
+
+                Console.WriteLine($"\n✅ Данные сохранены в: {AppSettings.BaseDirectory}");
+                Console.WriteLine($"   - Raschyot.csv (детальные данные)");
+                Console.WriteLine($"   - Ytog.csv (сводная таблица)");
             }
             catch (Exception ex)
             {
