@@ -651,11 +651,12 @@ namespace Hromov_Diplom.Config
             }
         };
     }
-
-    public static class AppSettings
+  public static class AppSettings
     {
-        public static readonly string BaseDirectory = @"C:\Users\Михаил\Desktop\Diplom_Hromov";
+        public static readonly string BaseDirectory = @"C:\Users\Михаил\Desktop\ДИплом на 30.03.2026\Подготовленные данные для расчета mdp_debag_1\Срез 21  (11.01.2023 04 28 - 04 29)";
         public static readonly string RegimeDirectory = Path.Combine(BaseDirectory, "mdp_debug_1");
-        public static readonly string OutputPath = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".", "generator_data_formatted.csv");
+
+        // ✅ ИЗМЕНЕНО: Новое имя файла - Raschyot.csv
+        public static readonly string OutputPath = Path.Combine(BaseDirectory, "Raschyot_bez_Vzd_bez_utyhelenia.csv");
     }
 }

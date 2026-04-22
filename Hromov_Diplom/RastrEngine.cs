@@ -47,8 +47,9 @@ namespace Hromov_Diplom.ComService
         {
             try
             {
-                string outDir = Path.GetDirectoryName(AppSettings.OutputPath) ?? ".";
-                if (!Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
+                // ✅ Убедимся, что директория существует
+                if (!Directory.Exists(AppSettings.BaseDirectory))
+                    Directory.CreateDirectory(AppSettings.BaseDirectory);
 
                 string filePath = AppSettings.OutputPath;
                 Console.WriteLine("⏳ Поиск таблицы генераторов...");
@@ -100,11 +101,13 @@ namespace Hromov_Diplom.ComService
                 Console.WriteLine($"✅ Обработано генераторов: {generators.Count} шт.\n");
                 ReportManager.ExportCleanDataWithSums(generators, filePath);
 
-                // ✅ АВТОМАТИЧЕСКИЙ ЭКСПОРТ СВОДНОЙ ТАБЛИЦЫ
-                string summaryPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "station_q_summary.csv");
+                // ✅ ИЗМЕНЕНО: Сводная таблица теперь называется Ytog.csv
+                string summaryPath = Path.Combine(AppSettings.BaseDirectory, "Ytog_bez_Vzd_bez_utyhelenia.csv");
                 ReportManager.ExportStationQSummary(generators, summaryPath);
 
-                Console.WriteLine($"\n✅ Данные успешно сохранены в: {filePath}");
+                Console.WriteLine($"\n✅ Данные успешно сохранены в: {AppSettings.BaseDirectory}");
+                Console.WriteLine($"   - {AppSettings.OutputPath}");      // Raschyot_bez_Vzd_bez_utyhelenia.csv
+                Console.WriteLine($"   - {summaryPath}");                 // Ytog_bez_Vzd_bez_utyhelenia.csv
             }
             catch (Exception ex)
             {
