@@ -8,6 +8,7 @@ using Hromov_Diplom.Models;
 
 namespace Hromov_Diplom.Reports
 {
+    #region Вспомогательные классы
     public static class StringExtensions
     {
         public static string Repeat(this string str, int count)
@@ -25,10 +26,10 @@ namespace Hromov_Diplom.Reports
         public int NumberOfPoints { get; set; }
         public int NumberOfIntervals { get; set; }
 
-        // Хранит все успешные расчёты Ki
+        // Хранит только значимые интервалы (Ki > 0.02)
         public List<(int Index, double FactorFrom, double FactorTo, double DeltaQ, double DeltaPred, double Ki)> Data { get; set; } = new();
 
-        // Вычисляемое свойство: средняя величина K_B только по реально работающим интервалам
+        // Групповой коэффициент считается только по отфильтрованным интервалам
         public double AverageGroupCoefficient
         {
             get
@@ -38,6 +39,7 @@ namespace Hromov_Diplom.Reports
             }
         }
     }
+    #endregion
 
     /// <summary>
     /// Менеджер отчётов с поддержкой пошагового сохранения
@@ -47,7 +49,6 @@ namespace Hromov_Diplom.Reports
         private readonly List<IterationReport> _reports = new();
         private readonly string _csvPath;
         private bool _headerWritten = false;
-        private StreamWriter? _fileWriter;
 
         public ReportManager(string csvPath)
         {
@@ -56,7 +57,6 @@ namespace Hromov_Diplom.Reports
 
             _csvPath = csvPath;
 
-            // Открываем файл для записи (заголовок будет написан на первой добавке)
             var directoryPath = Path.GetDirectoryName(_csvPath);
             if (!string.IsNullOrEmpty(directoryPath) && !Directory.Exists(directoryPath))
             {
@@ -67,27 +67,21 @@ namespace Hromov_Diplom.Reports
         public void AddResult(IterationReport report)
         {
             _reports.Add(report);
-            // ✅ САМОСТОЯТЕЛЬНОЕ СОХРАНЕНИЕ после добавления
             AppendRow(report);
         }
 
-        /// <summary>
-        /// Добавляет одну строку в CSV-файл без перезаписи всего файла
-        /// </summary>
         private void AppendRow(IterationReport report)
         {
             try
             {
                 using var writer = new StreamWriter(_csvPath, true, Encoding.UTF8);
 
-                // Пишем заголовок только один раз
                 if (!_headerWritten)
                 {
                     writer.WriteLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
                     _headerWritten = true;
                 }
 
-                // Записываем текущую строку
                 string station = report.StationName?.Replace(";", ",") ?? "";
                 string line = $"{station};" +
                              $"{report.Factor.ToString("F1", CultureInfo.InvariantCulture)};" +
@@ -98,7 +92,7 @@ namespace Hromov_Diplom.Reports
                              $"{report.Status}";
 
                 writer.WriteLine(line);
-                writer.Flush(); // Принудительно сохраняем в буфер
+                writer.Flush();
 
                 Console.WriteLine($"[SAVE] Строка сохранена: {station} | F={report.Factor:F1}");
             }
@@ -112,7 +106,6 @@ namespace Hromov_Diplom.Reports
         {
             try
             {
-                // Если данные уже писались пошагово, этот метод можно опустить или использовать для финальной проверки
                 var sb = new StringBuilder();
                 sb.AppendLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
 
@@ -147,7 +140,7 @@ namespace Hromov_Diplom.Reports
         }
 
         /// <summary>
-        /// Расчет всех коэффициентов влияния (ВСЕХ интервалов)
+        /// Расчет всех коэффициентов влияния с фильтрацией по порогу 0.02
         /// </summary>
         public List<InfluenceResult> CalculateInfluenceCoefficients()
         {
@@ -159,8 +152,9 @@ namespace Hromov_Diplom.Reports
 
             foreach (var group in stations)
             {
+                // Сортируем по коэффициенту и исключаем неудачные запуски
                 var sorted = group.OrderBy(r => r.Factor).ToList();
-                var workingReports = sorted.Where(r => r.Status != "NO_PATH").ToList();
+                var workingReports = sorted.Where(r => r.Status != "NO_PATH" && r.Status != "NO_RESULTS").ToList();
 
                 if (workingReports.Count < 2) continue;
 
@@ -168,41 +162,46 @@ namespace Hromov_Diplom.Reports
                 {
                     StationName = group.Key,
                     NumberOfPoints = workingReports.Count,
-                    NumberOfIntervals = workingReports.Count - 1,
+                    NumberOfIntervals = 0, // Установится после фильтрации
                     Data = new List<(int, double, double, double, double, double)>()
                 };
 
+                int validIntervalIndex = 1;
                 for (int i = 1; i < workingReports.Count; i++)
                 {
                     var prev = workingReports[i - 1];
                     var curr = workingReports[i];
 
-                    // Получаем предельный переток
                     double? deltaPred = GetSafeDeltaPred(prev, curr);
-
-                    // ✅ Автоматически вычисляем ΔQ из данных отчетов о модификации генераторов
                     double deltaQ = CalculateDeltaQ(prev, curr);
 
-                    // Если ΔQ > 0, то считаем Ki (даже при малом ΔPred)
                     if (deltaQ > 1e-6)
                     {
                         double ki = (deltaPred.HasValue && Math.Abs(deltaPred.Value) > 1e-6)
                             ? deltaPred.Value / deltaQ
                             : 0.0;
 
-                        result.Data.Add((i, prev.Factor, curr.Factor, deltaQ, deltaPred ?? 0, ki));
+                        // ✅ ФИЛЬТР: берем только интервалы, где Ki > 0.02
+                        if (ki > 0.02)
+                        {
+                            result.Data.Add((validIntervalIndex, prev.Factor, curr.Factor, deltaQ, deltaPred ?? 0, ki));
+                            validIntervalIndex++;
+                        }
                     }
                 }
 
-                if (result.Data.Count > 0) results.Add(result);
+                // ✅ Количество интервалов = только значимые переходы
+                result.NumberOfIntervals = result.Data.Count;
+
+                if (result.Data.Count > 0)
+                {
+                    results.Add(result);
+                }
             }
 
             return results;
         }
 
-        /// <summary>
-        /// Безопасное получение разницы в P_pred
-        /// </summary>
         private static double? GetSafeDeltaPred(IterationReport prev, IterationReport curr)
         {
             if (prev.Result.Pred.HasValue && curr.Result.Pred.HasValue)
@@ -213,38 +212,17 @@ namespace Hromov_Diplom.Reports
         }
 
         /// <summary>
-        /// ✅ Автоматический расчет ΔQ на основе измененных диапазонов генераторов
+        /// Расчет ΔQ на основе реальной разницы суммарных Qmax генераторов
         /// </summary>
         private double CalculateDeltaQ(IterationReport prev, IterationReport curr)
         {
-            // Суммарный объем Q по всем генераторам для предыдущей и текущей точки
-            // Используем Prev.Factor и Curr.Factor (коэффициенты масштабирования), а не m.Factor
-            double sumQ_prev = CalculateQVolumeFromMods(prev);
-            double sumQ_curr = CalculateQVolumeFromMods(curr);
-
-            return Math.Abs(sumQ_curr - sumQ_prev);
+            double sumQMaxCurr = curr.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
+            double sumQMaxPrev = prev.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
+            return Math.Abs(sumQMaxCurr - sumQMaxPrev);
         }
 
         /// <summary>
-        /// Расчет суммарного объема реактивной мощности из модификаций генераторов
-        /// </summary>
-        private double CalculateQVolumeFromMods(IterationReport report)
-        {
-            if (report.GeneratorModifications == null || report.GeneratorModifications.Count == 0)
-            {
-                // Если данных нет — используем приближенную оценку
-                return 750.0 * report.Factor;
-            }
-
-            // Суммируем: Qmin + |Qmax_old| × k для каждого генератора
-            double totalQ = report.GeneratorModifications.Sum(m =>
-                Math.Abs(m.Qmin) + Math.Abs(m.QmaxOld) * report.Factor);
-
-            return totalQ;
-        }
-
-        /// <summary>
-        /// Экспорт с чёткой подписью каждой станции
+        /// Экспорт результатов в CSV
         /// </summary>
         public void ExportInfluenceCoefficientsToCsv(List<InfluenceResult> results, string outputFilePath)
         {

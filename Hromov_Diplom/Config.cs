@@ -33,7 +33,7 @@ namespace Hromov_Diplom.Config
     {
         public static readonly double[] ScaleFactors = new double[]
         {
-            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
+                        0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00
         };
 
         // ✅ ВСЕ СТАНЦИИ ДОБАВЛЕНЫ КОРРЕКТНО
@@ -98,7 +98,112 @@ namespace Hromov_Diplom.Config
                 Name = "Усть-Илимская ТЭЦ",
                 GeneratorNums = new[] { 375, 376, 377, 378, 379 }
             },
+           // УШР
+           // Подстанции 220 кВ
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Чадан",
+                GeneratorNums = new[] { 446, 447 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Светлая",
+                GeneratorNums = new[] { 443, 444 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Районная",
+                GeneratorNums = new[] { 453, 454, 445 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Таксимо",
+                GeneratorNums = new[] { 459, 460 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Пеледуй",
+                GeneratorNums = new[] { 441, 442 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Петровск-Забайкальская",
+                GeneratorNums = new[] { 457, 458 }
+            },
 
+            // Подстанции 500 кВ
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Восход",
+                GeneratorNums = new[] { 421 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Озерная",
+                GeneratorNums = new[] { 426, 427, 435, 436 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Сеней",
+                GeneratorNums = new[] { 428 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Луговая",
+                GeneratorNums = new[] { 424 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Нельм",
+                GeneratorNums = new[] { 425 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Усть-Кут",
+                GeneratorNums = new[] { 432 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Камала-1",
+                GeneratorNums = new[] { 423 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Тайшет",
+                GeneratorNums = new[] { 430 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 500 кВ Томская",
+                GeneratorNums = new[] { 431 }
+            },
+
+            // Прочие объекты
+            new RegulatorConfig
+            {
+                Name = "УШР-110 кВ ПС 220 Кызыльская",
+                GeneratorNums = new[] { 456 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ НПС-9",
+                GeneratorNums = new[] { 439, 440 }
+            },
+            new RegulatorConfig
+            {
+                Name = "РП 110 кВ Полюс",
+                GeneratorNums = new[] { 455 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Чита",
+                GeneratorNums = new[] { 448 }
+            },
+            new RegulatorConfig
+            {
+                Name = "ПС 220 кВ Ергаки",
+                GeneratorNums = new[] { 438 }
+            },
 
         };
     }
