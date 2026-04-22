@@ -8,28 +8,13 @@ using Hromov_Diplom.Models;
 
 namespace Hromov_Diplom.Reports
 {
-    #region Вспомогательные классы
-    public static class StringExtensions
-    {
-        public static string Repeat(this string str, int count)
-        {
-            return string.Concat(Enumerable.Repeat(str, count));
-        }
-    }
-
-    /// <summary>
-    /// Результат расчёта коэффициентов влияния для одной станции
-    /// </summary>
     public class InfluenceResult
     {
         public string StationName { get; set; } = string.Empty;
         public int NumberOfPoints { get; set; }
         public int NumberOfIntervals { get; set; }
-
-        // Хранит только значимые интервалы (Ki > 0.02)
         public List<(int Index, double FactorFrom, double FactorTo, double DeltaQ, double DeltaPred, double Ki)> Data { get; set; } = new();
 
-        // Групповой коэффициент считается только по отфильтрованным интервалам
         public double AverageGroupCoefficient
         {
             get
@@ -39,11 +24,7 @@ namespace Hromov_Diplom.Reports
             }
         }
     }
-    #endregion
 
-    /// <summary>
-    /// Менеджер отчётов с поддержкой пошагового сохранения
-    /// </summary>
     public class ReportManager
     {
         private readonly List<IterationReport> _reports = new();
@@ -52,16 +33,10 @@ namespace Hromov_Diplom.Reports
 
         public ReportManager(string csvPath)
         {
-            if (string.IsNullOrWhiteSpace(csvPath))
-                throw new ArgumentException("Путь к CSV-файлу не может быть пустым", nameof(csvPath));
-
+            if (string.IsNullOrWhiteSpace(csvPath)) throw new ArgumentException("Путь к CSV пуст", nameof(csvPath));
             _csvPath = csvPath;
-
-            var directoryPath = Path.GetDirectoryName(_csvPath);
-            if (!string.IsNullOrEmpty(directoryPath) && !Directory.Exists(directoryPath))
-            {
-                Directory.CreateDirectory(directoryPath);
-            }
+            var dir = Path.GetDirectoryName(_csvPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
         }
 
         public void AddResult(IterationReport report)
@@ -75,84 +50,32 @@ namespace Hromov_Diplom.Reports
             try
             {
                 using var writer = new StreamWriter(_csvPath, true, Encoding.UTF8);
-
                 if (!_headerWritten)
                 {
                     writer.WriteLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
                     _headerWritten = true;
                 }
-
                 string station = report.StationName?.Replace(";", ",") ?? "";
-                string line = $"{station};" +
-                             $"{report.Factor.ToString("F1", CultureInfo.InvariantCulture)};" +
-                             $"{FormatVal(report.Result.Pred)};" +
-                             $"{FormatVal(report.Result.PadpReal)};" +
-                             $"{FormatVal(report.Result.ItogMdp)};" +
-                             $"{FormatVal(report.Result.ItogMdpPa)};" +
-                             $"{report.Status}";
-
+                string line = $"{station};{report.Factor.ToString("F2", CultureInfo.InvariantCulture)};" +
+                             $"{FormatVal(report.Result.Pred)};{FormatVal(report.Result.PadpReal)};" +
+                             $"{FormatVal(report.Result.ItogMdp)};{FormatVal(report.Result.ItogMdpPa)};{report.Status}";
                 writer.WriteLine(line);
                 writer.Flush();
-
-                Console.WriteLine($"[SAVE] Строка сохранена: {station} | F={report.Factor:F1}");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WARN] Не удалось сохранить строку: {ex.Message}");
-            }
+            catch (Exception ex) { Console.WriteLine($"[WARN] Ошибка сохранения строки: {ex.Message}"); }
         }
 
-        public bool WriteMainResults()
-        {
-            try
-            {
-                var sb = new StringBuilder();
-                sb.AppendLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
+        public bool WriteMainResults() => true;
 
-                foreach (var report in _reports)
-                {
-                    string station = report.StationName?.Replace(";", ",") ?? "";
-                    string line = $"{station};" +
-                                 $"{report.Factor.ToString("F1", CultureInfo.InvariantCulture)};" +
-                                 $"{FormatVal(report.Result.Pred)};" +
-                                 $"{FormatVal(report.Result.PadpReal)};" +
-                                 $"{FormatVal(report.Result.ItogMdp)};" +
-                                 $"{FormatVal(report.Result.ItogMdpPa)};" +
-                                 $"{report.Status}";
-
-                    sb.AppendLine(line);
-                }
-
-                string directoryPath = Path.GetDirectoryName(_csvPath);
-                if (!string.IsNullOrEmpty(directoryPath) && !Directory.Exists(directoryPath))
-                {
-                    Directory.CreateDirectory(directoryPath);
-                }
-
-                File.WriteAllText(_csvPath, sb.ToString(), Encoding.UTF8);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"⚠ Ошибка записи основного отчета: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Расчет всех коэффициентов влияния с фильтрацией по порогу 0.02
-        /// </summary>
         public List<InfluenceResult> CalculateInfluenceCoefficients()
         {
             var results = new List<InfluenceResult>();
-
             if (_reports == null || _reports.Count == 0) return results;
 
             var stations = _reports.GroupBy(r => r.StationName).ToList();
 
             foreach (var group in stations)
             {
-                // Сортируем по коэффициенту и исключаем неудачные запуски
                 var sorted = group.OrderBy(r => r.Factor).ToList();
                 var workingReports = sorted.Where(r => r.Status != "NO_PATH" && r.Status != "NO_RESULTS").ToList();
 
@@ -162,7 +85,7 @@ namespace Hromov_Diplom.Reports
                 {
                     StationName = group.Key,
                     NumberOfPoints = workingReports.Count,
-                    NumberOfIntervals = 0, // Установится после фильтрации
+                    NumberOfIntervals = 0,
                     Data = new List<(int, double, double, double, double, double)>()
                 };
 
@@ -181,7 +104,7 @@ namespace Hromov_Diplom.Reports
                             ? deltaPred.Value / deltaQ
                             : 0.0;
 
-                        // ✅ ФИЛЬТР: берем только интервалы, где Ki > 0.02
+                        // ✅ ФИЛЬТР: Ki > 0.02
                         if (ki > 0.02)
                         {
                             result.Data.Add((validIntervalIndex, prev.Factor, curr.Factor, deltaQ, deltaPred ?? 0, ki));
@@ -190,30 +113,19 @@ namespace Hromov_Diplom.Reports
                     }
                 }
 
-                // ✅ Количество интервалов = только значимые переходы
                 result.NumberOfIntervals = result.Data.Count;
-
-                if (result.Data.Count > 0)
-                {
-                    results.Add(result);
-                }
+                if (result.Data.Count > 0) results.Add(result);
             }
-
             return results;
         }
 
         private static double? GetSafeDeltaPred(IterationReport prev, IterationReport curr)
         {
             if (prev.Result.Pred.HasValue && curr.Result.Pred.HasValue)
-            {
                 return curr.Result.Pred.Value - prev.Result.Pred.Value;
-            }
             return null;
         }
 
-        /// <summary>
-        /// Расчет ΔQ на основе реальной разницы суммарных Qmax генераторов
-        /// </summary>
         private double CalculateDeltaQ(IterationReport prev, IterationReport curr)
         {
             double sumQMaxCurr = curr.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
@@ -221,17 +133,12 @@ namespace Hromov_Diplom.Reports
             return Math.Abs(sumQMaxCurr - sumQMaxPrev);
         }
 
-        /// <summary>
-        /// Экспорт результатов в CSV
-        /// </summary>
         public void ExportInfluenceCoefficientsToCsv(List<InfluenceResult> results, string outputFilePath)
         {
             if (string.IsNullOrEmpty(outputFilePath)) return;
-
             try
             {
                 using var writer = new StreamWriter(outputFilePath, false, Encoding.UTF8);
-
                 writer.WriteLine("=== КОЭФФИЦИЕНТЫ ВЛИЯНИЯ РЕАКТИВНОЙ МОЩНОСТИ ===");
                 writer.WriteLine("Станция;Переход;k_от;k_до;ΔQ_Мвар;ΔPred_МВт;k_v_коэффициент");
                 writer.WriteLine();
@@ -239,26 +146,19 @@ namespace Hromov_Diplom.Reports
                 foreach (var res in results)
                 {
                     writer.WriteLine($"*** СТАНЦИЯ: {res.StationName} ***");
-
-                    double groupKb = res.AverageGroupCoefficient;
-                    writer.WriteLine($"ГРУППОВОЙ;—;-;-;-;{groupKb:F9}");
+                    writer.WriteLine($"ГРУППОВОЙ;—;-;-;-;{res.AverageGroupCoefficient:F9}");
                     writer.WriteLine();
 
                     foreach (var d in res.Data)
                     {
-                        writer.WriteLine($"{d.Index};{res.StationName};{d.FactorFrom:F1}-{d.FactorTo:F1};{d.FactorFrom:F1};{d.FactorTo:F1};{d.DeltaQ:F2};{d.DeltaPred:F3};{d.Ki:F9}");
+                        writer.WriteLine($"{d.Index};{res.StationName};{d.FactorFrom:F2}-{d.FactorTo:F2};{d.FactorFrom:F2};{d.FactorTo:F2};{d.DeltaQ:F2};{d.DeltaPred:F3};{d.Ki:F9}");
                     }
-
                     writer.WriteLine("--- --- --- --- --- --- --- ---");
                     writer.WriteLine();
                 }
-
                 Console.WriteLine($"✅ Коэффициенты влияния сохранены: {outputFilePath}");
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"⚠ Ошибка экспорта коэффициентов влияния: {ex.Message}");
-            }
+            catch (Exception ex) { Console.WriteLine($"⚠ Ошибка экспорта: {ex.Message}"); }
         }
 
         private string FormatVal(double? val)
