@@ -1,39 +1,39 @@
+#nullable disable
+using Hromov_Diplom.Models;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Hromov_Diplom.Models;
 
 namespace Hromov_Diplom.Reports
 {
+
+    public static class StringExtensions
+    {
+        public static string Repeat(this string str, int count) => string.Concat(Enumerable.Repeat(str, count));
+    }
+
     public class InfluenceResult
     {
         public string StationName { get; set; } = string.Empty;
         public int NumberOfPoints { get; set; }
         public int NumberOfIntervals { get; set; }
         public List<(int Index, double FactorFrom, double FactorTo, double DeltaQ, double DeltaPred, double Ki)> Data { get; set; } = new();
-
-        public double AverageGroupCoefficient
-        {
-            get
-            {
-                if (Data.Count == 0) return 0;
-                return Data.Average(d => d.Ki);
-            }
-        }
+        public double AverageGroupCoefficient => Data.Count > 0 ? Data.Average(d => d.Ki) : 0;
     }
 
     public class ReportManager
     {
+        public int GetReportCount() => _reports.Count;
         private readonly List<IterationReport> _reports = new();
         private readonly string _csvPath;
         private bool _headerWritten = false;
 
         public ReportManager(string csvPath)
         {
-            if (string.IsNullOrWhiteSpace(csvPath)) throw new ArgumentException("Путь к CSV пуст", nameof(csvPath));
+            if (string.IsNullOrWhiteSpace(csvPath)) throw new ArgumentException("Пустой путь CSV", nameof(csvPath));
             _csvPath = csvPath;
             var dir = Path.GetDirectoryName(_csvPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -62,7 +62,7 @@ namespace Hromov_Diplom.Reports
                 writer.WriteLine(line);
                 writer.Flush();
             }
-            catch (Exception ex) { Console.WriteLine($"[WARN] Ошибка сохранения строки: {ex.Message}"); }
+            catch (Exception ex) { Console.WriteLine($"[WARN] Ошибка сохранения: {ex.Message}"); }
         }
 
         public bool WriteMainResults() => true;
@@ -72,44 +72,34 @@ namespace Hromov_Diplom.Reports
             var results = new List<InfluenceResult>();
             if (_reports == null || _reports.Count == 0) return results;
 
-            var stations = _reports.GroupBy(r => r.StationName).ToList();
-
-            foreach (var group in stations)
+            foreach (var group in _reports.GroupBy(r => r.StationName))
             {
-                var sorted = group.OrderBy(r => r.Factor).ToList();
-                var workingReports = sorted.Where(r => r.Status != "NO_PATH" && r.Status != "NO_RESULTS").ToList();
-
-                if (workingReports.Count < 2) continue;
+                var working = group.OrderBy(r => r.Factor).Where(r => r.Status != "NO_PATH" && r.Status != "NO_RESULTS").ToList();
+                if (working.Count < 2) continue;
 
                 var result = new InfluenceResult
                 {
                     StationName = group.Key,
-                    NumberOfPoints = workingReports.Count,
-                    NumberOfIntervals = 0,
+                    NumberOfPoints = working.Count,
                     Data = new List<(int, double, double, double, double, double)>()
                 };
 
-                int validIntervalIndex = 1;
-                for (int i = 1; i < workingReports.Count; i++)
+                int idx = 1;
+                for (int i = 1; i < working.Count; i++)
                 {
-                    var prev = workingReports[i - 1];
-                    var curr = workingReports[i];
+                    // ✅ ИСПРАВЛЕНО: разделили объявление var на две строки
+                    var prev = working[i - 1];
+                    var curr = working[i];
 
-                    double? deltaPred = GetSafeDeltaPred(prev, curr);
+                    double? deltaPred = prev.Result.Pred.HasValue && curr.Result.Pred.HasValue
+                        ? curr.Result.Pred.Value - prev.Result.Pred.Value : null;
                     double deltaQ = CalculateDeltaQ(prev, curr);
 
-                    if (deltaQ > 1e-6)
+                    if (deltaQ > 1e-6 && deltaPred.HasValue && Math.Abs(deltaPred.Value) > 1e-6)
                     {
-                        double ki = (deltaPred.HasValue && Math.Abs(deltaPred.Value) > 1e-6)
-                            ? deltaPred.Value / deltaQ
-                            : 0.0;
-
-                        // ✅ ФИЛЬТР: Ki > 0.02
+                        double ki = deltaPred.Value / deltaQ;
                         if (ki > 0.02)
-                        {
-                            result.Data.Add((validIntervalIndex, prev.Factor, curr.Factor, deltaQ, deltaPred ?? 0, ki));
-                            validIntervalIndex++;
-                        }
+                            result.Data.Add((idx++, prev.Factor, curr.Factor, deltaQ, deltaPred.Value, ki));
                     }
                 }
 
@@ -119,18 +109,11 @@ namespace Hromov_Diplom.Reports
             return results;
         }
 
-        private static double? GetSafeDeltaPred(IterationReport prev, IterationReport curr)
-        {
-            if (prev.Result.Pred.HasValue && curr.Result.Pred.HasValue)
-                return curr.Result.Pred.Value - prev.Result.Pred.Value;
-            return null;
-        }
-
         private double CalculateDeltaQ(IterationReport prev, IterationReport curr)
         {
-            double sumQMaxCurr = curr.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
-            double sumQMaxPrev = prev.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
-            return Math.Abs(sumQMaxCurr - sumQMaxPrev);
+            double sumCurr = curr.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
+            double sumPrev = prev.GeneratorModifications?.Sum(m => m.QmaxNew) ?? 0;
+            return Math.Abs(sumCurr - sumPrev);
         }
 
         public void ExportInfluenceCoefficientsToCsv(List<InfluenceResult> results, string outputFilePath)
@@ -148,23 +131,90 @@ namespace Hromov_Diplom.Reports
                     writer.WriteLine($"*** СТАНЦИЯ: {res.StationName} ***");
                     writer.WriteLine($"ГРУППОВОЙ;—;-;-;-;{res.AverageGroupCoefficient:F9}");
                     writer.WriteLine();
-
                     foreach (var d in res.Data)
-                    {
-                        writer.WriteLine($"{d.Index};{res.StationName};{d.FactorFrom:F2}-{d.FactorTo:F2};{d.FactorFrom:F2};{d.FactorTo:F2};{d.DeltaQ:F2};{d.DeltaPred:F3};{d.Ki:F9}");
-                    }
-                    writer.WriteLine("--- --- --- --- --- --- --- ---");
-                    writer.WriteLine();
+                        writer.WriteLine($"{d.Index};{res.StationName};{d.Item2:F2}-{d.Item3:F2};{d.Item2:F2};{d.Item3:F2};{d.Item4:F2};{d.Item5:F3};{d.Item6:F9}");
+                    writer.WriteLine("--- --- --- --- --- --- --- ---\n");
                 }
-                Console.WriteLine($"✅ Коэффициенты влияния сохранены: {outputFilePath}");
+                Console.WriteLine($"✅ Коэффициенты сохранены: {outputFilePath}");
             }
             catch (Exception ex) { Console.WriteLine($"⚠ Ошибка экспорта: {ex.Message}"); }
         }
 
-        private string FormatVal(double? val)
+        public static void ExportCleanDataWithSums(List<GeneratorReportData> allGenerators, string filePath)
         {
-            if (val.HasValue) return val.Value.ToString("F3", CultureInfo.InvariantCulture);
-            return "-";
+            try
+            {
+                var dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                using var writer = new StreamWriter(filePath, false, Encoding.UTF8);
+                writer.WriteLine("Станция;Номер генератора;Наименование;Активная мощность P (МВт);Реактивная мощность Q (Мвар);Qmin (Мвар);Qmax (Мвар);sta");
+
+                foreach (var stationGroup in allGenerators.GroupBy(g => g.StationName).OrderBy(g => g.Key))
+                {
+                    var generators = stationGroup.ToList();
+                    writer.WriteLine("");
+                    writer.WriteLine($">>> СТАНЦИЯ: {stationGroup.Key}");
+                    writer.WriteLine($"Всего генераторов: {generators.Count} шт.");
+
+                    double sumP = 0, sumQ = 0, sumQmax = 0;
+                    foreach (var gen in generators.Where(g => g.StatusFlag == 0))
+                    {
+                        sumP += gen.ActivePower;
+                        sumQ += gen.ReactivePower;
+                        sumQmax += gen.Qmax;
+                    }
+
+                    foreach (var gen in generators.OrderBy(g => g.GeneratorNum))
+                    {
+                        string pStr = gen.ActivePower != 0 ? gen.ActivePower.ToString("F3", CultureInfo.InvariantCulture) : "-";
+                        string qStr = gen.ReactivePower != 0 ? gen.ReactivePower.ToString("F3", CultureInfo.InvariantCulture) : "-";
+                        writer.WriteLine($"{stationGroup.Key};{gen.GeneratorNum:D3};\"{EscapeCsv(gen.Name)}\";{pStr};{qStr};{gen.Qmin:F0};{gen.Qmax:F0};{gen.StatusFlag}");
+                    }
+
+                    writer.WriteLine("--------------------------------------------");
+                    double diff = sumQmax - sumQ;
+                    writer.WriteLine($"СУММА;{stationGroup.Key};;{sumP:F3};{sumQ:F3};;;{sumQmax:F3};{diff:F3}\n");
+                }
+
+                double grandQmax = allGenerators.Where(g => g.StatusFlag == 0).Sum(g => g.Qmax);
+                double grandP = allGenerators.Where(g => g.StatusFlag == 0).Sum(g => g.ActivePower);
+                double grandQ = allGenerators.Where(g => g.StatusFlag == 0).Sum(g => g.ReactivePower);
+                writer.WriteLine("================================================================================");
+                writer.WriteLine($"Общее количество обработанных генераторов: {allGenerators.Count} шт.");
+                writer.WriteLine($"Суммарная активная мощность (P, ста=0): {grandP:F3} МВт");
+                writer.WriteLine($"Суммарная реактивная мощность (Q, ста=0): {grandQ:F3} Мвар");
+                writer.WriteLine($"Суммарный предел Qmax (ста=0): {grandQmax:F3} Мвар");
+                writer.WriteLine("=== КОНЕЦ ФАЙЛА ===");
+                Console.WriteLine($"✅ Данные сохранены: {filePath}");
+            }
+            catch (Exception ex) { Console.WriteLine($"❌ Ошибка: {ex.Message}"); }
         }
+
+        public static void ExportStationQSummary(List<GeneratorReportData> allGenerators, string outputCsvPath)
+        {
+            try
+            {
+                using var writer = new StreamWriter(outputCsvPath, false, Encoding.UTF8);
+                writer.WriteLine("Станция;sumQ (Мвар);sumQmax (Мвар);diff (Мвар)");
+
+                foreach (var stationGroup in allGenerators.GroupBy(g => g.StationName).OrderBy(g => g.Key))
+                {
+                    double sumQ = 0, sumQmax = 0;
+                    foreach (var gen in stationGroup.Where(g => g.StatusFlag == 0))
+                    {
+                        sumQ += gen.ReactivePower;
+                        sumQmax += gen.Qmax;
+                    }
+                    double diff = sumQmax - sumQ;
+                    writer.WriteLine($"{stationGroup.Key};{sumQ:F3};{sumQmax:F3};{diff:F3}");
+                }
+                Console.WriteLine($"✅ Сводная таблица сохранена: {outputCsvPath}");
+            }
+            catch (Exception ex) { Console.WriteLine($"❌ Ошибка: {ex.Message}"); }
+        }
+
+        private static string EscapeCsv(string text) => '"' + text.Replace("\"", "\"\"") + '"';
+        private string FormatVal(double? val) => val.HasValue ? val.Value.ToString("F3", CultureInfo.InvariantCulture) : "-";
     }
 }

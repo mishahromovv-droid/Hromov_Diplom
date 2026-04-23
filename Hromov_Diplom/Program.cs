@@ -5,7 +5,6 @@ using Hromov_Diplom.Models;
 using Hromov_Diplom.Reports;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -16,189 +15,222 @@ namespace Hromov_Diplom
     {
         static void Main(string[] args)
         {
-            Run();
+            Console.OutputEncoding = Encoding.UTF8;
+            try
+            {
+                Console.WriteLine("🚀 СТАРТ ПРОГРАММЫ");
+                Console.WriteLine($"📂 Базовая папка: {AppSettings.BaseRoot}");
+                Console.WriteLine("--------------------------------------------------------");
+
+                if (!Directory.Exists(AppSettings.OutputRoot))
+                    Directory.CreateDirectory(AppSettings.OutputRoot);
+
+                // 🔹 ШАГ 1: Коэффициенты влияния
+                RunInfluenceCalculation(AppSettings.RegimeFolders[0]);
+
+                Console.WriteLine("\n⏸️  Нажмите Enter для продолжения...");
+                Console.ReadLine();
+
+                // 🔹 ШАГИ 2-6: Выгрузка Q/Qmax
+                foreach (var regime in AppSettings.RegimeFolders)
+                {
+                    RunQExport(regime);
+                    Console.WriteLine("\n⏸️  Нажмите Enter для следующего режима...");
+                    Console.ReadLine();
+                }
+
+                OrganizeResults();
+                Console.WriteLine("\n✅ ВСЕ ЗАДАЧИ ВЫПОЛНЕНЫ!");
+                Console.WriteLine($"📁 Результаты в: {AppSettings.OutputRoot}");
+                Console.WriteLine("\nНажмите любую клавишу для выхода...");
+                Console.ReadKey();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n❌ КРИТИЧЕСКАЯ ОШИБКА: {ex.Message}\n{ex.StackTrace}");
+                Console.ReadKey();
+            }
         }
 
-        static void Run()
+        static void RunInfluenceCalculation(string regimeName)
         {
-            Console.OutputEncoding = Encoding.UTF8;
+            Console.WriteLine("==========================================");
+            Console.WriteLine("   ШАГ 1: РАСЧЁТ КОЭФФИЦИЕНТОВ ВЛИЯНИЯ");
+            Console.WriteLine($"   Режим: {regimeName}");
+            Console.WriteLine("==========================================");
 
-            if (!string.IsNullOrEmpty(AppSettings.CsvPath) && File.Exists(AppSettings.CsvPath))
+            var regimePath = Path.Combine(AppSettings.BaseRoot, regimeName);
+            if (!Directory.Exists(regimePath) && !File.Exists(regimePath))
             {
-                try
-                {
-                    File.Delete(AppSettings.CsvPath);
-                    Console.WriteLine("[CLEAN] Старый файл результатов удалён.");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[WARN] Не удалось удалить файл: {ex.Message}");
-                }
+                Console.WriteLine($"❌ Не найден режим: {regimePath}");
+                return;
             }
 
-            PrintHeader();
+            using var engine = new RastrEngine();
+            var reportManager = new ReportManager(Path.Combine(AppSettings.BaseRoot, $"results_{regimeName}.csv"));
 
-            using var rastrEngine = new RastrEngine();
-            var reportManager = !string.IsNullOrEmpty(AppSettings.CsvPath)
-                ? new ReportManager(AppSettings.CsvPath)
-                : throw new InvalidOperationException("Путь к файлу не указан!");
-
-            foreach (var station in CalculationSettings.Stations)
+            try
             {
-                Console.WriteLine($"\n{'=',60}");
-                Console.WriteLine($"⚙ СТАНЦИЯ: {station.Name}");
-                Console.WriteLine($"   Генераторы: {string.Join(", ", station.GeneratorNums)}");
-                Console.WriteLine($"   Количество: {station.GeneratorNums.Length} шт.");
-                Console.WriteLine($"{'=',60}");
+                Console.WriteLine("[1] Инициализация RastrWin3...");
+                engine.Initialize();
+                Console.WriteLine("    ✅ OK");
 
-                var generatorProcessor = new GeneratorProcessor(station.GeneratorNums, station.Name);
+                Console.WriteLine("[2] Загрузка режима...");
+                engine.LoadModeFiles(regimePath);
+                Console.WriteLine("    ✅ OK");
 
-                try
+                foreach (var station in CalculationSettings.Stations)
                 {
-                    Console.Write("[INIT] Инициализация RastrWin3... ");
-                    rastrEngine.Initialize();
-                    Console.WriteLine("OK");
+                    Console.WriteLine($"\n⚙ {station.Name}");
+                    var processor = new GeneratorProcessor(station.GeneratorNums, station.Name);
 
                     foreach (double factor in CalculationSettings.ScaleFactors)
                     {
-                        ProcessIteration(rastrEngine, generatorProcessor, factor, reportManager, station.Name);
+                        string status = ProcessIteration(engine, processor, factor, reportManager, station.Name);
+                        Console.WriteLine($"   🔹 F={factor:0.00} -> {status}");
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"\n✗ ОШИБКА СТАНЦИИ {station.Name}: {ex.Message}");
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n❌ Ошибка в цикле расчёта: {ex.Message}");
             }
 
-            if (reportManager.WriteMainResults())
+            // Если добавлял GetReportCount() в ReportManager, оставь эту строку. Если нет - удали.
+            Console.WriteLine($"\n[DEBUG] Отчётов собрано: {reportManager.GetReportCount()}");
+
+            var results = reportManager.CalculateInfluenceCoefficients();
+
+            if (results.Any())
             {
-                Console.WriteLine($"\n✅ Основные результаты сохранены: {AppSettings.CsvPath}");
+                var folder = Path.Combine(AppSettings.OutputRoot, "Коэффициенты влияния");
+                Directory.CreateDirectory(folder);
+                var outPath = Path.Combine(folder, $"{regimeName}_influence.csv");
+                reportManager.ExportInfluenceCoefficientsToCsv(results, outPath);
+                Console.WriteLine($"✅ Коэффициенты сохранены: {outPath}");
             }
             else
             {
-                Console.WriteLine("\n❌ Ошибка сохранения основных результатов.");
+                Console.WriteLine("⚠ Коэффициенты не рассчитаны. Проверьте статусы выше (должно быть много OK).");
             }
-
-            CalculateAndExportInfluenceCoefficients(reportManager);
         }
 
-        static void CalculateAndExportInfluenceCoefficients(ReportManager reportManager)
+        // ✅ ИСПРАВЛЕНО: Явное приведение к List<ValueTuple> убирает ошибку dynamic-деконструкции
+        static string ProcessIteration(RastrEngine engine, GeneratorProcessor processor, double factor,
+            ReportManager reporter, string stationName)
+        {
+            var report = new IterationReport { Factor = factor, StationName = stationName };
+            try
+            {
+                engine.ZeroVirTable(VirSettings.TableName, VirSettings.ColumnName, VirSettings.KeepNum);
+
+                // Приводим dynamic-результат к конкретному типу списка кортежей
+                var modsList = (System.Collections.Generic.List<(int num, string name, double qmin, double qmaxOld, double qmaxNew)>)
+                               processor.ApplyLimits(engine.RawObject, factor);
+
+                report.GeneratorModifications = new List<GeneratorModification>();
+
+                foreach (var item in modsList)
+                {
+                    report.GeneratorModifications.Add(new GeneratorModification
+                    {
+                        Num = item.num,
+                        Name = item.name,
+                        Qmin = item.qmin,
+                        QmaxOld = item.qmaxOld,
+                        QmaxNew = item.qmaxNew
+                    });
+                }
+
+                if (!processor.ValidateRanges(engine.RawObject))
+                {
+                    report.Status = "INVALID_DATA";
+                    reporter.AddResult(report);
+                    return report.Status;
+                }
+
+                var originalOut = Console.Out;
+                Console.SetOut(TextWriter.Null);
+                try { engine.CalculateEmergencies(); }
+                finally { Console.SetOut(originalOut); }
+
+                if (!engine.HasResults())
+                {
+                    report.Status = "NO_RESULTS";
+                    reporter.AddResult(report);
+                    return report.Status;
+                }
+
+                var res = engine.GetResults();
+                report.Result = res;
+                report.Status = res.IsSuccess ? "OK" : "FAILED_PRED";
+            }
+            catch (Exception ex)
+            {
+                report.Status = $"ERROR: {ex.Message}";
+            }
+            reporter.AddResult(report);
+            return report.Status;
+        }
+
+        static void RunQExport(string regimeName)
+        {
+            Console.WriteLine($"\n==========================================");
+            Console.WriteLine($"   ВЫГРУЗКА ДАННЫХ (Q / Qmax)");
+            Console.WriteLine($"   Режим: {regimeName}");
+            Console.WriteLine("==========================================");
+
+            var regimePath = Path.Combine(AppSettings.BaseRoot, regimeName);
+            if (!Directory.Exists(regimePath) && !File.Exists(regimePath))
+            {
+                Console.WriteLine($"❌ Не найден режим: {regimePath}");
+                return;
+            }
+
+            using var engine = new RastrEngine();
+            try
+            {
+                Console.WriteLine("[1] Инициализация..."); engine.Initialize(); Console.WriteLine("    ✅");
+                Console.WriteLine("[2] Загрузка..."); engine.LoadModeFiles(regimePath); Console.WriteLine("    ✅");
+                Console.WriteLine("[3] Экспорт генераторов...");
+                var gens = engine.ExportGeneratorDataToList();
+                Console.WriteLine($"    📊 Найдено: {gens.Count}");
+
+                // ✅ ГИБКИЙ SWITCH: понимает оба варианта написания (debug/debag)
+                string folderName = regimeName switch
+                {
+                    "mdp_debag_1" or "mdp_debug_1" => "Коэффициенты влияния",
+                    "mdp_debag_1_Утяжеленный" or "mdp_debug_1_Утяжеленный" => "Утяжеленный",
+                    "mdp_debag_1_Утяжеленный_до_МДП" or "mdp_debug_1_Утяжеленный_до_МДП" => "Утяжеленный_до_МДП",
+                    "mdp_debag_1_Утяжеленный_с_Vzd" or "mdp_debug_1_Утяжеленный_с_Vzd" => "Утяжеленный_с_Vzd(Станции)",
+                    "mdp_debag_1_Утяжеленный_с_Vzd_до_МДП" or "mdp_debug_1_Утяжеленный_с_Vzd_до_МДП" => "Утяжеленный_с_Vzd(Станции)_до_МДП",
+                    _ => regimeName
+                };
+
+                var target = Path.Combine(AppSettings.OutputRoot, folderName);
+                Directory.CreateDirectory(target);
+
+                ReportManager.ExportCleanDataWithSums(gens, Path.Combine(target, "Raschyot.csv"));
+                ReportManager.ExportStationQSummary(gens, Path.Combine(target, "Ytog.csv"));
+                Console.WriteLine($"✅ Сохранено в: {target}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ ОШИБКА: {ex.Message}");
+            }
+        }
+
+        static void OrganizeResults()
         {
             Console.WriteLine("\n==========================================");
-            Console.WriteLine("🔧 РАСЧЁТ КОЭФФИЦИЕНТОВ ВЛИЯНИЯ...");
-            Console.WriteLine("==========================================\n");
-
-            try
-            {
-                var results = reportManager.CalculateInfluenceCoefficients();
-
-                if (results.Any())
-                {
-                    string csvPathWithK = AppSettings.CsvPath.Replace(".csv", "_influence.csv");
-                    reportManager.ExportInfluenceCoefficientsToCsv(results, csvPathWithK);
-
-                    Console.WriteLine($"✅ Коэффициенты влияния успешно рассчитаны и сохранены!");
-                    Console.WriteLine($"📂 Файл результатов: {csvPathWithK}\n");
-                }
-                else
-                {
-                    Console.WriteLine("⚠ Нет данных для расчёта коэффициентов влияния.\n");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Ошибка при расчёте коэффициентов влияния: {ex.Message}\n");
-            }
-        }
-
-        static void PrintHeader()
-        {
+            Console.WriteLine("   ФИНАЛЬНАЯ ПРОВЕРКА");
             Console.WriteLine("==========================================");
-            Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
-            Console.WriteLine("==========================================");
-            Console.WriteLine($"Станции: {string.Join(" → ", CalculationSettings.Stations.Select(s => s.Name))}");
-            Console.WriteLine($"Коэффициенты: {string.Join("  ", CalculationSettings.ScaleFactors.Select(f => f.ToString("0.0")))}");
-            Console.WriteLine($"Генераторы: {string.Join(", ", GetAllGeneratorNums())}");
-            Console.WriteLine($"ut_vir: Act=0 кроме Num={VirSettings.KeepNum}");
-            Console.WriteLine("==========================================\n");
-        }
-
-        static string GetAllGeneratorNums()
-        {
-            return string.Join(", ", CalculationSettings.Stations.SelectMany(s => s.GeneratorNums));
-        }
-
-        static void ProcessIteration(RastrEngine engine, GeneratorProcessor processor, double factor, ReportManager reporter, string stationName)
-        {
-            IterationReport currentReport = new IterationReport { Factor = factor, StationName = stationName };
-
-            try
+            var folders = new[] { "Коэффициенты влияния", "Утяжеленный", "Утяжеленный_до_МДП", "Утяжеленный_с_Vzd(Станции)", "Утяжеленный_с_Vzd(Станции)_до_МДП" };
+            foreach (var f in folders)
             {
-                if (!string.IsNullOrEmpty(AppSettings.RegimeDirectory))
-                {
-                    engine.LoadModeFiles(AppSettings.RegimeDirectory);
-                    engine.ZeroVirTable(VirSettings.TableName, VirSettings.ColumnName, VirSettings.KeepNum);
-
-                    var modifications = processor.ApplyLimits(engine.RawObject, factor);
-                    currentReport.GeneratorModifications = ConvertToModifications(modifications);
-
-                    if (!processor.ValidateRanges(engine.RawObject))
-                    {
-                        currentReport.Status = "INVALID_DATA";
-                        reporter.AddResult(currentReport);
-                        return;
-                    }
-
-                    // ✅ ПОДАВЛЕНИЕ ВЫВОДА RASTRWIN3
-                    var originalOut = Console.Out;
-                    Console.SetOut(System.IO.StreamWriter.Null);
-                    try
-                    {
-                        engine.CalculateEmergencies();
-                    }
-                    finally
-                    {
-                        Console.SetOut(originalOut);
-                    }
-
-                    if (!engine.HasResults())
-                    {
-                        currentReport.Status = "NO_RESULTS";
-                        reporter.AddResult(currentReport);
-                        return;
-                    }
-
-                    var result = engine.GetResults();
-                    currentReport.Result = result;
-                    currentReport.Status = result.IsSuccess ? "OK" : "FAILED_CALCULATION";
-                }
-                else
-                {
-                    currentReport.Status = "NO_PATH";
-                    reporter.AddResult(currentReport);
-                }
+                var p = Path.Combine(AppSettings.OutputRoot, f);
+                Console.WriteLine(Directory.Exists(p) ? $"✅ {f}/ — готово" : $"⚠ {f}/ — не создана");
             }
-            catch (Exception ex)
-            {
-                currentReport.Status = $"ERROR: {ex.Message.Split(':')[0]}";
-                currentReport.ErrorDetails = ex.Message;
-                Console.WriteLine($"\n✗ ОШИБКА (F={factor}): {ex.Message}");
-            }
-
-            reporter.AddResult(currentReport);
-        }
-
-        static List<GeneratorModification> ConvertToModifications(
-            List<(int num, string name, double qmin, double qmaxOld, double qmaxNew)> mods)
-        {
-            return mods.ConvertAll(m => new GeneratorModification
-            {
-                Num = m.num,
-                Name = m.name,
-                Qmin = m.qmin,
-                QmaxOld = m.qmaxOld,
-                QmaxNew = m.qmaxNew
-            });
         }
     }
 }

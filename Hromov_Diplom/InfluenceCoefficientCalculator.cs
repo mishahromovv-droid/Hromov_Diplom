@@ -6,14 +6,8 @@ using System.Linq;
 
 namespace Hromov_Diplom.Calculators
 {
-    /// <summary>
-    /// Калькулятор коэффициентов влияния на основе результатов пакетных расчётов МДП
-    /// </summary>
     public class InfluenceCoefficientCalculator
     {
-        /// <summary>
-        /// Структура данных для хранения отчёта по одной итерации (должна быть public!)
-        /// </summary>
         public class CsvReportRow
         {
             public string Station { get; set; } = string.Empty;
@@ -23,22 +17,6 @@ namespace Hromov_Diplom.Calculators
             public double ItogMdp { get; set; }
         }
 
-        /// <summary>
-        /// Класс для хранения одного индивидуального коэффициента влияния
-        /// </summary>
-        public class InfluenceRecord
-        {
-            public string StationName { get; set; } = string.Empty;
-            public double FactorFrom { get; set; }
-            public double FactorTo { get; set; }
-            public double DeltaQ_MVar { get; set; }
-            public double DeltaPred_MW { get; set; }
-            public double IndividualKB { get; set; }
-        }
-
-        /// <summary>
-        /// Структура результата по станции
-        /// </summary>
         public class StationInfluenceResult
         {
             public string StationName { get; set; } = string.Empty;
@@ -48,23 +26,14 @@ namespace Hromov_Diplom.Calculators
             public double AverageGroupCoefficient { get; set; }
         }
 
-        /// <summary>
-        /// Расчёт коэффициентов влияния по CSV-файлу с результатами МДП
-        /// </summary>
-        /// <param name="csvFilePath">Путь к CSV-файлу с результатами</param>
-        /// <returns>Список результатов по станциям</returns>
         public static List<StationInfluenceResult> CalculateFromCsvFile(string csvFilePath)
         {
             if (!File.Exists(csvFilePath))
-            {
                 throw new FileNotFoundException($"Файл не найден: {csvFilePath}");
-            }
 
             var lines = File.ReadAllLines(csvFilePath);
             var reportsByStation = new Dictionary<string, List<CsvReportRow>>();
-            var stationResults = new List<StationInfluenceResult>();
 
-            // Парсинг CSV (пропуск заголовка)
             foreach (var line in lines.Skip(1).Where(l => !string.IsNullOrWhiteSpace(l)))
             {
                 var parts = line.Split(';');
@@ -88,13 +57,11 @@ namespace Hromov_Diplom.Calculators
                 }
             }
 
-            // Обработка каждой станции
+            var stationResults = new List<StationInfluenceResult>();
             foreach (var kvp in reportsByStation)
             {
                 var rowList = kvp.Value.OrderBy(r => r.Factor).ToList();
-
-                if (rowList.Count < 2)
-                    continue;
+                if (rowList.Count < 2) continue;
 
                 var result = new StationInfluenceResult
                 {
@@ -105,18 +72,12 @@ namespace Hromov_Diplom.Calculators
                 };
 
                 double sumCoefficients = 0;
-
-                // Расчёт по интервалам
                 for (int i = 1; i < rowList.Count; i++)
                 {
                     var prev = rowList[i - 1];
                     var curr = rowList[i];
-
-                    // ΔP_pred
                     double deltaPred = curr.Pred - prev.Pred;
-
-                    // ΔQ оценка (упрощённая)
-                    double estimatedDeltaQ = 750 * (curr.Factor - prev.Factor); // Типичное значение
+                    double estimatedDeltaQ = 750 * (curr.Factor - prev.Factor);
 
                     if (Math.Abs(estimatedDeltaQ) > 1e-6 && Math.Abs(deltaPred) > 1e-6)
                     {
@@ -126,26 +87,17 @@ namespace Hromov_Diplom.Calculators
                     }
                 }
 
-                // Среднее значение
                 if (result.IndividualCoefficients.Count > 0)
-                {
                     result.AverageGroupCoefficient = sumCoefficients / result.IndividualCoefficients.Count;
-                }
 
                 stationResults.Add(result);
             }
-
             return stationResults;
         }
 
-        /// <summary>
-        /// Экспорт результатов в CSV
-        /// </summary>
         public static void ExportToCsv(List<StationInfluenceResult> results, string outputFilePath)
         {
             using var writer = new StreamWriter(outputFilePath, false, System.Text.Encoding.UTF8);
-
-            // Заголовок таблицы
             writer.WriteLine("Станция;Количество точек(M);Количество интервалов(M-1);Групповой коэффициент влияния(K_B)");
             writer.WriteLine("");
             writer.WriteLine("─".Repeat(100));
@@ -164,26 +116,17 @@ namespace Hromov_Diplom.Calculators
                 writer.WriteLine($"└──────────────────────────────────────────────────────────────┘");
                 writer.WriteLine();
 
-                // Детализация
                 for (int i = 0; i < res.IndividualCoefficients.Count; i++)
-                {
                     writer.WriteLine($"  Переход {i + 1}: {res.IndividualCoefficients[i]:+#.####;-#.####;0.######} МВт/Мвар");
-                }
-
                 writer.WriteLine();
             }
-
             Console.WriteLine($"Результаты экспортированы: {outputFilePath}");
         }
     }
 
-    #region Вспомогательный класс расширения для строк
-    public static class StringExtensions
+    public static class StringExtensionsCalc
     {
-        public static string Repeat(this string str, int count)
-        {
-            return string.Concat(Enumerable.Repeat(str, count));
-        }
+        public static string Repeat(this string str, int count) =>
+            string.Concat(System.Linq.Enumerable.Repeat(str, count));
     }
-    #endregion
 }

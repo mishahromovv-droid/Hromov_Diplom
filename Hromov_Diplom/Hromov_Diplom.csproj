@@ -50,14 +50,20 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Config.cs" />
+    <Compile Include="AppSettings.cs" />
+    <Compile Include="CalculationResult.cs" />
+    <Compile Include="CalculationSettings.cs" />
+    <Compile Include="GeneratorModification.cs" />
     <Compile Include="GeneratorProcessor.cs" />
+    <Compile Include="GeneratorReportData.cs" />
     <Compile Include="InfluenceCoefficientCalculator.cs" />
-    <Compile Include="Models.cs" />
+    <Compile Include="IterationReport.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RastrEngine.cs" />
+    <Compile Include="RegulatorConfig.cs" />
     <Compile Include="ReportManager.cs" />
+    <Compile Include="VirSettings.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
