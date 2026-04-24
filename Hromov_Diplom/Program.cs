@@ -18,7 +18,7 @@ namespace Hromov_Diplom
             Console.OutputEncoding = Encoding.UTF8;
             try
             {
-                Console.WriteLine("🚀 СТАРТ ПРОГРАММЫ");
+                Console.WriteLine("🚀 СТАРТ ПРОГРАММЫ (РЕЖИМ АВТОСОХРАНЕНИЯ)");
                 Console.WriteLine($"📂 Базовая папка: {AppSettings.BaseRoot}");
                 Console.WriteLine("--------------------------------------------------------");
 
@@ -79,15 +79,22 @@ namespace Hromov_Diplom
                 engine.LoadModeFiles(regimePath);
                 Console.WriteLine("    ✅ OK");
 
+                int totalStations = CalculationSettings.Stations.Length;
+                int currentStationIndex = 0;
+
                 foreach (var station in CalculationSettings.Stations)
                 {
-                    Console.WriteLine($"\n⚙ {station.Name}");
+                    currentStationIndex++;
+                    Console.WriteLine($"\n⚙ [{currentStationIndex}/{totalStations}] {station.Name}");
                     var processor = new GeneratorProcessor(station.GeneratorNums, station.Name);
 
                     foreach (double factor in CalculationSettings.ScaleFactors)
                     {
                         string status = ProcessIteration(engine, processor, factor, reportManager, station.Name);
                         Console.WriteLine($"   🔹 F={factor:0.00} -> {status}");
+
+                        // ✅ АВТОСОХРАНЕНИЕ ПОСЛЕ КАЖДОЙ ИТЕРАЦИИ
+                        reportManager.SaveCurrentResults();
                     }
                 }
             }
@@ -96,7 +103,6 @@ namespace Hromov_Diplom
                 Console.WriteLine($"\n❌ Ошибка в цикле расчёта: {ex.Message}");
             }
 
-            // Если добавлял GetReportCount() в ReportManager, оставь эту строку. Если нет - удали.
             Console.WriteLine($"\n[DEBUG] Отчётов собрано: {reportManager.GetReportCount()}");
 
             var results = reportManager.CalculateInfluenceCoefficients();
@@ -115,7 +121,6 @@ namespace Hromov_Diplom
             }
         }
 
-        // ✅ ИСПРАВЛЕНО: Явное приведение к List<ValueTuple> убирает ошибку dynamic-деконструкции
         static string ProcessIteration(RastrEngine engine, GeneratorProcessor processor, double factor,
             ReportManager reporter, string stationName)
         {
@@ -124,7 +129,6 @@ namespace Hromov_Diplom
             {
                 engine.ZeroVirTable(VirSettings.TableName, VirSettings.ColumnName, VirSettings.KeepNum);
 
-                // Приводим dynamic-результат к конкретному типу списка кортежей
                 var modsList = (System.Collections.Generic.List<(int num, string name, double qmin, double qmaxOld, double qmaxNew)>)
                                processor.ApplyLimits(engine.RawObject, factor);
 
@@ -196,7 +200,6 @@ namespace Hromov_Diplom
                 var gens = engine.ExportGeneratorDataToList();
                 Console.WriteLine($"    📊 Найдено: {gens.Count}");
 
-                // ✅ ГИБКИЙ SWITCH: понимает оба варианта написания (debug/debag)
                 string folderName = regimeName switch
                 {
                     "mdp_debag_1" or "mdp_debug_1" => "Коэффициенты влияния",

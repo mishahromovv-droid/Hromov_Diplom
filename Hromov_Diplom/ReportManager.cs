@@ -9,7 +9,6 @@ using System.Text;
 
 namespace Hromov_Diplom.Reports
 {
-
     public static class StringExtensions
     {
         public static string Repeat(this string str, int count) => string.Concat(Enumerable.Repeat(str, count));
@@ -26,7 +25,6 @@ namespace Hromov_Diplom.Reports
 
     public class ReportManager
     {
-        public int GetReportCount() => _reports.Count;
         private readonly List<IterationReport> _reports = new();
         private readonly string _csvPath;
         private bool _headerWritten = false;
@@ -35,8 +33,13 @@ namespace Hromov_Diplom.Reports
         {
             if (string.IsNullOrWhiteSpace(csvPath)) throw new ArgumentException("Пустой путь CSV", nameof(csvPath));
             _csvPath = csvPath;
-            var dir = Path.GetDirectoryName(_csvPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+            // При создании менеджера сразу создаем заголовок файла, чтобы он существовал
+            if (!File.Exists(_csvPath))
+            {
+                using var initWriter = new StreamWriter(_csvPath, false, Encoding.UTF8);
+                initWriter.WriteLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
+            }
         }
 
         public void AddResult(IterationReport report)
@@ -45,27 +48,47 @@ namespace Hromov_Diplom.Reports
             AppendRow(report);
         }
 
-        private void AppendRow(IterationReport report)
+        // ✅ НОВЫЙ МЕТОД: Принудительное сохранение всех данных на диск
+        public void SaveCurrentResults()
         {
             try
             {
-                using var writer = new StreamWriter(_csvPath, true, Encoding.UTF8);
-                if (!_headerWritten)
+                // Перезаписываем файл полностью, чтобы гарантировать целостность
+                using var writer = new StreamWriter(_csvPath, false, Encoding.UTF8);
+                writer.WriteLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
+
+                foreach (var report in _reports)
                 {
-                    writer.WriteLine("Станция;Коэффициент;Предельный Переток;АДП;МДП;МДП_с_ПА;Статус");
-                    _headerWritten = true;
+                    string station = report.StationName?.Replace(";", ",") ?? "";
+                    string line = $"{station};{report.Factor.ToString("F2", CultureInfo.InvariantCulture)};" +
+                                 $"{FormatVal(report.Result.Pred)};{FormatVal(report.Result.PadpReal)};" +
+                                 $"{FormatVal(report.Result.ItogMdp)};{FormatVal(report.Result.ItogMdpPa)};{report.Status}";
+                    writer.WriteLine(line);
                 }
+                // Console.WriteLine($"[AUTO-SAVE] Сохранено строк: {_reports.Count}"); // Можно раскомментировать для отладки
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WARN] Ошибка автосохранения: {ex.Message}");
+            }
+        }
+
+        private void AppendRow(IterationReport report)
+        {
+            // Этот метод оставляем для быстрого добавления, но основной упор теперь на SaveCurrentResults
+            try
+            {
+                using var writer = new StreamWriter(_csvPath, true, Encoding.UTF8);
                 string station = report.StationName?.Replace(";", ",") ?? "";
                 string line = $"{station};{report.Factor.ToString("F2", CultureInfo.InvariantCulture)};" +
                              $"{FormatVal(report.Result.Pred)};{FormatVal(report.Result.PadpReal)};" +
                              $"{FormatVal(report.Result.ItogMdp)};{FormatVal(report.Result.ItogMdpPa)};{report.Status}";
                 writer.WriteLine(line);
-                writer.Flush();
             }
-            catch (Exception ex) { Console.WriteLine($"[WARN] Ошибка сохранения: {ex.Message}"); }
+            catch (Exception ex) { Console.WriteLine($"[WARN] Ошибка доп. сохранения: {ex.Message}"); }
         }
 
-        public bool WriteMainResults() => true;
+        public int GetReportCount() => _reports.Count;
 
         public List<InfluenceResult> CalculateInfluenceCoefficients()
         {
@@ -87,7 +110,6 @@ namespace Hromov_Diplom.Reports
                 int idx = 1;
                 for (int i = 1; i < working.Count; i++)
                 {
-                    // ✅ ИСПРАВЛЕНО: разделили объявление var на две строки
                     var prev = working[i - 1];
                     var curr = working[i];
 
@@ -186,7 +208,9 @@ namespace Hromov_Diplom.Reports
                 writer.WriteLine($"Суммарная реактивная мощность (Q, ста=0): {grandQ:F3} Мвар");
                 writer.WriteLine($"Суммарный предел Qmax (ста=0): {grandQmax:F3} Мвар");
                 writer.WriteLine("=== КОНЕЦ ФАЙЛА ===");
-                Console.WriteLine($"✅ Данные сохранены: {filePath}");
+
+                // Не выводим лишний раз в консоль, чтобы не засорять
+                // Console.WriteLine($"✅ Данные сохранены: {filePath}");
             }
             catch (Exception ex) { Console.WriteLine($"❌ Ошибка: {ex.Message}"); }
         }
@@ -209,7 +233,7 @@ namespace Hromov_Diplom.Reports
                     double diff = sumQmax - sumQ;
                     writer.WriteLine($"{stationGroup.Key};{sumQ:F3};{sumQmax:F3};{diff:F3}");
                 }
-                Console.WriteLine($"✅ Сводная таблица сохранена: {outputCsvPath}");
+                // Console.WriteLine($"✅ Сводная таблица сохранена: {outputCsvPath}");
             }
             catch (Exception ex) { Console.WriteLine($"❌ Ошибка: {ex.Message}"); }
         }
