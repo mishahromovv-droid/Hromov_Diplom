@@ -43,7 +43,7 @@ namespace Hromov_Diplom.Config
         {
             Name = "Абаканская ТЭЦ",
             GeneratorNums = new[] { 1, 2, 3, 4 }
-        },
+        }, 
 
         new RegulatorConfig
         {
