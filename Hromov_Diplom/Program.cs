@@ -68,6 +68,13 @@ namespace Hromov_Diplom
                 {
                     Console.WriteLine($"\n✗ ОШИБКА СТАНЦИИ {station.Name}: {ex.Message}");
                 }
+                finally
+                {
+                    // ✅ Очистка памяти после КАЖДОЙ станции
+                    Console.Write("[CLEANUP] Очистка RastrWin3... ");
+                    rastrEngine.Reset();
+                    Console.WriteLine("OK");
+                }
             }
 
             if (reportManager.WriteMainResults())
@@ -116,16 +123,16 @@ namespace Hromov_Diplom
             Console.WriteLine("==========================================");
             Console.WriteLine("    ПАКЕТНЫЙ РАСЧЁТ МДП (RastrWin3)");
             Console.WriteLine("==========================================");
-            Console.WriteLine($"Станции: {string.Join(" → ", CalculationSettings.Stations.Select(s => s.Name))}");
+            Console.WriteLine($"Станции: {CalculationSettings.Stations.Length} шт.");
             Console.WriteLine($"Коэффициенты: {string.Join("  ", CalculationSettings.ScaleFactors.Select(f => f.ToString("0.0")))}");
-            Console.WriteLine($"Генераторы: {string.Join(", ", GetAllGeneratorNums())}");
+            Console.WriteLine($"Всего генераторов: {GetAllGeneratorNums().Count()}");
             Console.WriteLine($"ut_vir: Act=0 кроме Num={VirSettings.KeepNum}");
             Console.WriteLine("==========================================\n");
         }
 
-        static string GetAllGeneratorNums()
+        static IEnumerable<int> GetAllGeneratorNums()
         {
-            return string.Join(", ", CalculationSettings.Stations.SelectMany(s => s.GeneratorNums));
+            return CalculationSettings.Stations.SelectMany(s => s.GeneratorNums);
         }
 
         static void ProcessIteration(RastrEngine engine, GeneratorProcessor processor, double factor, ReportManager reporter, string stationName)

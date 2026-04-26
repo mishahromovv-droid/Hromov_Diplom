@@ -8,15 +8,6 @@ using Hromov_Diplom.Models;
 
 namespace Hromov_Diplom.Reports
 {
-    #region Вспомогательные классы
-    public static class StringExtensions
-    {
-        public static string Repeat(this string str, int count)
-        {
-            return string.Concat(Enumerable.Repeat(str, count));
-        }
-    }
-
     /// <summary>
     /// Результат расчёта коэффициентов влияния для одной станции
     /// </summary>
@@ -39,7 +30,6 @@ namespace Hromov_Diplom.Reports
             }
         }
     }
-    #endregion
 
     /// <summary>
     /// Менеджер отчётов с поддержкой пошагового сохранения

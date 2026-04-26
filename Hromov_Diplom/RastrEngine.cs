@@ -1,6 +1,5 @@
 using Hromov_Diplom.Models;
 using System;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -19,6 +18,36 @@ namespace Hromov_Diplom.ComService
             Type type = Type.GetTypeFromProgID(progId)
                 ?? throw new Exception($"COM-объект '{progId}' не зарегистрирован.");
             _rastrObj = Activator.CreateInstance(type);
+        }
+
+        /// <summary>
+        /// Корректно освобождает COM-объект и сбрасывает состояние
+        /// </summary>
+        public void Reset()
+        {
+            if (_rastrObj != null)
+            {
+                try
+                {
+                    // Попытка закрыть режим в Rastr
+                    _rastrObj?.Close();
+                }
+                catch { /* Игнорируем ошибки закрытия */ }
+
+                // Освобождаем COM-объект
+                try
+                {
+                    Marshal.ReleaseComObject(_rastrObj);
+                }
+                catch { /* Игнорируем ошибки освобождения */ }
+
+                _rastrObj = null;
+            }
+
+            // Принудительный сборщик мусора для финализации COM-объектов
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
         }
 
         public void LoadModeFiles(string path)
@@ -106,12 +135,8 @@ namespace Hromov_Diplom.ComService
 
         public void Dispose()
         {
-            if (!_isDisposed && _rastrObj != null)
-            {
-                Marshal.ReleaseComObject(_rastrObj);
-                _rastrObj = null;
-                _isDisposed = true;
-            }
+            Reset();
+            _isDisposed = true;
         }
     }
 }
