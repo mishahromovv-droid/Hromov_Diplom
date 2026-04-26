@@ -1,4 +1,4 @@
-﻿namespace Hromov_Diplom.Models
+﻿namespace Hromov_Diplom
 {
     public class GeneratorReportData
     {
